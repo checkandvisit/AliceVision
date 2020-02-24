@@ -73,3 +73,7 @@ Production
 *.tar*
 
 .vscode/settings.json
+
+# Some tmp file
+tmp
+src/aliceVision-stamp

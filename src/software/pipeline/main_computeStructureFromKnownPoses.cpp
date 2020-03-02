@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     ("input,i", po::value<std::string>(&sfmDataFilename)->required(),
       "SfMData file.")
     ("output,o", po::value<std::string>(&outSfMDataFilename)->required(),
-      "Output path for the features and descriptors files (*.feat, *.desc).")
+      "Output path for the SfMData file.")
     ("featuresFolders,f", po::value<std::vector<std::string>>(&featuresFolders)->multitoken()->required(),
       "Path to folder(s) containing the extracted features.");
 

@@ -14,6 +14,7 @@
 #include <aliceVision/system/Logger.hpp>
 #include <aliceVision/system/cmdline.hpp>
 #include <aliceVision/config.hpp>
+#include <aliceVision/sfmData/colorize.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -38,6 +39,7 @@ int main(int argc, char **argv)
   std::string outSfMDataFilename;
   std::vector<std::string> featuresFolders;
   double geometricErrorMax = 5.0;
+  bool colorizedSfm = false;
   // user optional parameters
 
   std::string describerTypesName = feature::EImageDescriberType_enumToString(feature::EImageDescriberType::SIFT);
@@ -62,7 +64,10 @@ int main(int argc, char **argv)
       "Path to folder(s) in which computed matches are stored.")
     ("geometricErrorMax", po::value<double>(&geometricErrorMax)->default_value(geometricErrorMax),
         "Maximum error (in pixels) allowed for features matching during geometric verification for known camera poses. "
-        "If set to 0 it lets the ACRansac select an optimal value.");
+        "If set to 0 it lets the ACRansac select an optimal value.")
+    ("colorizedSfm,c", po::value<bool>(&colorizedSfm)->default_value(colorizedSfm),
+      "Color the Landmarks of SfmData");
+;
 
   po::options_description logParams("Log parameters");
   logParams.add_options()
@@ -165,6 +170,11 @@ int main(int argc, char **argv)
 
   // create 3D landmarks
   structureEstimator.triangulate(sfmData, regionsPerView);
+
+  if(colorizedSfm)
+  {
+    sfmData::colorizeTracks(sfmData);
+  }
 
   sfm::RemoveOutliers_AngleError(sfmData, 2.0);
 

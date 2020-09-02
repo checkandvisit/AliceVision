@@ -396,11 +396,7 @@ int aliceVision_main(int argc, char **argv)
     sfmData::Views& views = sfmData.getViews();
     std::vector<std::string> imagePaths;
 
-<<<<<<< HEAD
-    if(listFiles(imageFolder, {".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".nef"},  imagePaths))
-=======
     if(listFiles(imageFolder, image::getSupportedExtensions(), imagePaths))
->>>>>>> 287c71a571fdd174c9c6e4b58521effe67847500
     {
       std::vector<sfmData::View> incompleteViews(imagePaths.size());
 

@@ -10,8 +10,8 @@
 #include <aliceVision/numeric/numeric.hpp>
 #include <aliceVision/geometry/rigidTransformation3D.hpp>
 
+#include <aliceVision/utils/Histogram.hpp>
 #include <dependencies/htmlDoc/htmlDoc.hpp>
-#include <dependencies/histogram/histogram.hpp>
 #include <dependencies/vectorGraphics/svgDrawer.hpp>
 
 #include <boost/filesystem.hpp>
@@ -169,10 +169,10 @@ inline void EvaluteToGT(
 //  std::cout << "\nAngular residuals (Degree) \n";
 //  copy(vec_angularErrors.begin(), vec_angularErrors.end(), std::ostream_iterator<double>(std::cout, " , "));
 
-  MinMaxMeanMedian<double> statsBaseline(vec_baselineErrors.begin(), vec_baselineErrors.end());
+  BoxStats<double> statsBaseline(vec_baselineErrors.begin(), vec_baselineErrors.end());
   std::cout << std::endl << "\nBaseline error statistics:\n" << statsBaseline;
 
-  MinMaxMeanMedian<double> statsAngular(vec_angularErrors.begin(), vec_angularErrors.end());
+  BoxStats<double> statsAngular(vec_angularErrors.begin(), vec_angularErrors.end());
   std::cout << std::endl << "\nAngular error statistics:\n" << statsAngular;
 
   // Export camera position (viewable)
@@ -218,7 +218,7 @@ inline void EvaluteToGT(
     htmlDocStream->pushInfo( htmlDocument::htmlMarkup("pre", os.str()));
 
     const double maxRange = *std::max_element(vec_baselineErrors.begin(), vec_baselineErrors.end());
-    Histogram<double> baselineHistogram(0.0, maxRange, 50);
+    utils::Histogram<double> baselineHistogram(0.0, maxRange, 50);
     baselineHistogram.Add(vec_baselineErrors.begin(), vec_baselineErrors.end());
 
     svg::svgHisto svg_BaselineHistogram;
@@ -277,7 +277,7 @@ inline void EvaluteToGT(
     htmlDocStream->pushInfo( htmlDocument::htmlMarkup("pre", os.str()));
     
     const double maxRangeAngular = *std::max_element(vec_angularErrors.begin(), vec_angularErrors.end());
-    Histogram<double> angularHistogram(0.0, maxRangeAngular, 50);
+    utils::Histogram<double> angularHistogram(0.0, maxRangeAngular, 50);
     angularHistogram.Add(vec_angularErrors.begin(), vec_angularErrors.end());
 
     svg::svgHisto svg_AngularHistogram;

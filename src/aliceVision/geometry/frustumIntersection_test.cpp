@@ -9,13 +9,14 @@
 #include "aliceVision/geometry/Frustum.hpp"
 
 #include "aliceVision/multiview/NViewDataSet.hpp"
-#include "aliceVision/multiview/projection.hpp"
+#include "aliceVision/numeric/projection.hpp"
 
 #include <iostream>
 
 #define BOOST_TEST_MODULE frustumIntersection
-#include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/floating_point_comparison.hpp>
 
 using namespace aliceVision;
 using namespace aliceVision::geometry;

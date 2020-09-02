@@ -6,15 +6,17 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include <aliceVision/system/Timer.hpp>
-#include <aliceVision/sfm/sfm.hpp>
+#include <aliceVision/sfmData/SfMData.hpp>
+#include <aliceVision/sfmDataIO/sfmDataIO.hpp>
 
 #include <boost/filesystem.hpp>
 
 #include <sstream>
 
 #define BOOST_TEST_MODULE sfmDataIO
-#include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/floating_point_comparison.hpp>
 
 using namespace aliceVision;
 using namespace aliceVision::camera;

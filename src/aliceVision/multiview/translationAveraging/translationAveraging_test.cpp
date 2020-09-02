@@ -15,8 +15,9 @@
 #include <vector>
 
 #define BOOST_TEST_MODULE translationAveraging
-#include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/floating_point_comparison.hpp>
 #include <aliceVision/unitTest.hpp>
 
 using namespace aliceVision;
@@ -43,7 +44,7 @@ BOOST_AUTO_TEST_CASE(translation_averaging_globalTi_from_tijs_Triplets_softL1_Ce
       bCardiod, bRelative_Translation_PerTriplet
     );
 
-  d.ExportToPLY("global_translations_from_triplets_GT.ply");
+  d.exportToPLY("global_translations_from_triplets_GT.ply");
   visibleCamPosToSVGSurface(d._C, "global_translations_from_triplets_GT.svg");
 
   // Solve the translation averaging problem:
@@ -92,7 +93,7 @@ BOOST_AUTO_TEST_CASE(translation_averaging_globalTi_from_tijs_softl1_Ceres) {
       bCardiod, bRelative_Translation_PerTriplet
     );
 
-  d.ExportToPLY("global_translations_from_Tij_GT.ply");
+  d.exportToPLY("global_translations_from_Tij_GT.ply");
   visibleCamPosToSVGSurface(d._C, "global_translations_from_Tij_GT.svg");
 
   // Solve the translation averaging problem:
@@ -141,7 +142,7 @@ BOOST_AUTO_TEST_CASE(translation_averaging_globalTi_from_tijs_Triplets_l2_chorda
       bCardiod, bRelative_Translation_PerTriplet
     );
 
-  d.ExportToPLY("global_translations_from_Tij_GT.ply");
+  d.exportToPLY("global_translations_from_Tij_GT.ply");
   visibleCamPosToSVGSurface(d._C, "global_translations_from_Tij_GT.svg");
 
   //-- Compute the global translations from the triplets of heading directions

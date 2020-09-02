@@ -29,10 +29,6 @@ ImageDescriber_CCTAG::CCTagParameters::CCTagParameters(size_t nRings)
 #endif
 }
 
-ImageDescriber_CCTAG::CCTagParameters::~CCTagParameters()
-{
-}
-
 bool ImageDescriber_CCTAG::CCTagParameters::setPreset(EImageDescriberPreset preset)
 {
   switch(preset)
@@ -60,9 +56,6 @@ ImageDescriber_CCTAG::ImageDescriber_CCTAG(const std::size_t nRings)
   , _params(nRings)
   {}
 
-ImageDescriber_CCTAG::~ImageDescriber_CCTAG()
-{
-}
 
 bool ImageDescriber_CCTAG::useCuda() const
 {
@@ -143,7 +136,7 @@ bool ImageDescriber_CCTAG::describe(const image::Image<unsigned char>& image,
       }
       desc[cctag.id()] = (unsigned char) 255;
       regionsCasted->Descriptors().push_back(desc);
-      const float scale = std::max(cctag.outerEllipse().a(), cctag.outerEllipse().b());
+      const float scale = std::max(cctag.rescaledOuterEllipse().a(), cctag.rescaledOuterEllipse().b());
       regionsCasted->Features().push_back(PointFeature(cctag.x(), cctag.y(), scale, orientation));
     }
   }

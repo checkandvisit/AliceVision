@@ -8,7 +8,7 @@
 #include "aliceVision/multiview/NViewDataSet.hpp"
 #include "aliceVision/numeric/numeric.hpp"
 #include <aliceVision/config.hpp>
-#include "aliceVision/multiview/projection.hpp"
+#include "aliceVision/numeric/projection.hpp"
 #include "aliceVision/linearProgramming/ISolver.hpp"
 #include "aliceVision/linearProgramming/OSIXSolver.hpp"
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_MOSEK)
@@ -22,8 +22,9 @@
 #include <vector>
 
 #define BOOST_TEST_MODULE TranslationStructureLInfinity
-#include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/floating_point_comparison.hpp>
 
 using namespace aliceVision;
 
@@ -37,7 +38,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER) {
   const NViewDataSet d = NRealisticCamerasRing(nViews, nbPoints,
     NViewDatasetConfigurator(1,1,0,0,5,0)); // Suppose a camera with Unit matrix as K
 
-  d.ExportToPLY("test_Before_Infinity.ply");
+  d.exportToPLY("test_Before_Infinity.ply");
   //-- Test triangulation of all the point
   NViewDataSet d2 = d;
 
@@ -101,7 +102,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER) {
     for (size_t i = 0; i < d2._n; ++i) {
       for(size_t k = 0; k < d._x[0].cols(); ++k)
       {
-        xk = Project(d2.P(i), Vec3(d2._X.col(k)));
+        xk = project(d2.P(i), Vec3(d2._X.col(k)));
         xsum += Vec2(( xk - d2._x[i].col(k)).array().pow(2));
       }
     }
@@ -111,7 +112,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER) {
     BOOST_CHECK_SMALL(dResidual2D, 1e-4);
   }
 
-  d2.ExportToPLY("test_After_Infinity.ply");
+  d2.exportToPLY("test_After_Infinity.ply");
 }
 
 BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER_K) {
@@ -121,7 +122,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER_K) {
   const NViewDataSet d = NRealisticCamerasRing(nViews, nbPoints,
     NViewDatasetConfigurator(1000,1000,500,500,5,0)); // Suppose a camera with Unit matrix as K
 
-  d.ExportToPLY("test_Before_Infinity.ply");
+  d.exportToPLY("test_Before_Infinity.ply");
   //-- Test triangulation of all the point
   NViewDataSet d2 = d;
 
@@ -189,7 +190,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER_K) {
     for (size_t i = 0; i < d2._n; ++i) {
       for(size_t k = 0; k < (size_t)d._x[0].cols(); ++k)
       {
-        xk = Project(d2.P(i), Vec3(d2._X.col(k)));
+        xk = project(d2.P(i), Vec3(d2._X.col(k)));
         xsum += Vec2(( xk - d2._x[i].col(k)).array().pow(2));
       }
     }
@@ -199,7 +200,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_OSICLP_SOLVER_K) {
     BOOST_CHECK_SMALL(dResidual2D, 1e-4);
   }
 
-  d2.ExportToPLY("test_After_Infinity.ply");
+  d2.exportToPLY("test_After_Infinity.ply");
 }
 
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_MOSEK)
@@ -210,7 +211,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_MOSEK) {
   const NViewDataSet d = NRealisticCamerasRing(nViews, nbPoints,
     NViewDatasetConfigurator(1,1,0,0,5,0)); // Suppose a camera with Unit matrix as K
 
-  d.ExportToPLY("test_Before_Infinity.ply");
+  d.exportToPLY("test_Before_Infinity.ply");
   //-- Test triangulation of all the point
   NViewDataSet d2 = d;
 
@@ -274,7 +275,7 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_MOSEK) {
     for (size_t i = 0; i < d2._n; ++i) {
       for(size_t k = 0; k < d._x[0].cols(); ++k)
       {
-        xk = Project(d2.P(i), Vec3(d2._X.col(k)));
+        xk = project(d2.P(i), Vec3(d2._X.col(k)));
         xsum += Vec2(( xk - d2._x[i].col(k)).array().pow(2));
       }
     }
@@ -284,6 +285,6 @@ BOOST_AUTO_TEST_CASE(Translation_Structure_L_Infinity_MOSEK) {
     BOOST_CHECK_SMALL(dResidual2D, 1e-4);
   }
 
-  d2.ExportToPLY("test_After_Infinity.ply");
+  d2.exportToPLY("test_After_Infinity.ply");
 }
 #endif // ALICEVISION_HAVE_MOSEK

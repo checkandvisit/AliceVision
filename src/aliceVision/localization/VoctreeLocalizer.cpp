@@ -12,7 +12,7 @@
 #include <aliceVision/sfm/pipeline/RelativePoseInfo.hpp>
 #include <aliceVision/sfm/BundleAdjustmentCeres.hpp>
 #include <aliceVision/sfm/pipeline/regionsIO.hpp>
-#include <aliceVision/feature/svgVisualization.hpp>
+#include <aliceVision/matching/svgVisualization.hpp>
 #include <aliceVision/matching/RegionsMatcher.hpp>
 #include <aliceVision/matchingImageCollection/IImageCollectionMatcher.hpp>
 #include <aliceVision/matchingImageCollection/GeometricFilterMatrix.hpp>
@@ -20,7 +20,8 @@
 #include <aliceVision/matchingImageCollection/GeometricFilterMatrix_F_AC.hpp>
 #include <aliceVision/matchingImageCollection/GeometricFilterMatrix.hpp>
 #include <aliceVision/numeric/numeric.hpp>
-#include <aliceVision/robustEstimation/guidedMatching.hpp>
+#include <aliceVision/multiview/relativePose/FundamentalError.hpp>
+#include <aliceVision/matching/guidedMatching.hpp>
 #include <aliceVision/system/Logger.hpp>
 #include <aliceVision/system/Timer.hpp>
 
@@ -236,7 +237,7 @@ bool VoctreeLocalizer::localize(const image::Image<float>& imageGrey,
     }
 
     namespace bfs = boost::filesystem;
-    feature::saveFeatures2SVG(imagePath,
+    matching::saveFeatures2SVG(imagePath,
                      queryImageSize,
                      extractedFeatures,
                      param->_visualDebug + "/" + bfs::path(imagePath).stem().string() + ".svg");
@@ -486,7 +487,7 @@ bool VoctreeLocalizer::localizeFirstBestResult(const feature::MapRegionsPerDesc 
       const std::string matchedImage = bfs::path(mview->getImagePath()).stem().string();
       const std::string matchedPath = mview->getImagePath();
       
-      feature::saveMatches2SVG(imagePath,
+      matching::saveMatches2SVG(imagePath,
                       queryImageSize,
                       queryRegions,
                       matchedPath,
@@ -563,7 +564,7 @@ bool VoctreeLocalizer::localizeFirstBestResult(const feature::MapRegionsPerDesc 
       Vec3 t_;
       // Decompose the projection matrix  to get K, R and t using 
       // RQ decomposition
-      KRt_From_P(resectionData.projection_matrix, &K_, &R_, &t_);
+      KRt_from_P(resectionData.projection_matrix, &K_, &R_, &t_);
       ALICEVISION_LOG_DEBUG("K estimated\n" << K_);
       queryIntrinsics.setK(K_);
       queryIntrinsics.setWidth(queryImageSize.first);
@@ -664,7 +665,7 @@ bool VoctreeLocalizer::localizeAllResults(const feature::MapRegionsPerDesc &quer
     if(!param._visualDebug.empty() && !imagePath.empty())
     {
       namespace bfs = boost::filesystem;
-      feature::saveFeatures2SVG(imagePath,
+        matching::saveFeatures2SVG(imagePath,
                                  queryImageSize,
                                  resectionData.pt2D,
                                  param._visualDebug + "/" + bfs::path(imagePath).stem().string() + ".associations.svg");
@@ -687,7 +688,7 @@ bool VoctreeLocalizer::localizeAllResults(const feature::MapRegionsPerDesc &quer
     Vec3 t_;
     // Decompose the projection matrix  to get K, R and t using 
     // RQ decomposition
-    KRt_From_P(resectionData.projection_matrix, &K_, &R_, &t_);
+    KRt_from_P(resectionData.projection_matrix, &K_, &R_, &t_);
     queryIntrinsics.setK(K_);
     ALICEVISION_LOG_DEBUG("K estimated\n" << K_);
     queryIntrinsics.setWidth(queryImageSize.first);
@@ -707,7 +708,7 @@ bool VoctreeLocalizer::localizeAllResults(const feature::MapRegionsPerDesc &quer
   if(!param._visualDebug.empty() && !imagePath.empty())
   {
     namespace bfs = boost::filesystem;
-    feature::saveFeatures2SVG(imagePath,
+    matching::saveFeatures2SVG(imagePath,
                      queryImageSize,
                      resectionData.pt2D,
                      param._visualDebug + "/" + bfs::path(imagePath).stem().string() + ".associations.svg",
@@ -877,7 +878,7 @@ void VoctreeLocalizer::getAllAssociations(const feature::MapRegionsPerDesc &quer
       outputName += matchedImage;
       outputName += ".svg";
 
-      feature::saveMatches2SVG(imagePath,
+      matching::saveMatches2SVG(imagePath,
                                 imageSize,
                                 queryRegions,
                                 matchedPath,
@@ -1133,14 +1134,15 @@ bool VoctreeLocalizer::robustMatching(matching::RegionsDatabaseMatcherPerDesc & 
   // perform guided matching.
   // So we ignore the previous matches and recompute all matches.
   out_featureMatches.clear();
-  robustEstimation::GuidedMatching<
-          Mat3,
-          aliceVision::fundamental::kernel::EpipolarDistanceError>(
-        geometricFilter.m_F,
-        queryIntrinsicsBase, // camera::IntrinsicBase of the matched image
+
+  robustEstimation::Mat3Model model(geometricFilter.m_F);
+
+  matching::guidedMatching<robustEstimation::Mat3Model, multiview::relativePose::FundamentalEpipolarDistanceError>(
+        model,
+        queryIntrinsicsBase,                  // camera::IntrinsicBase of the matched image
         matchers.getDatabaseRegionsPerDesc(), // feature::Regions
-        matchedIntrinsicsBase, // camera::IntrinsicBase of the query image
-        matchedRegions, // feature::Regions
+        matchedIntrinsicsBase,                // camera::IntrinsicBase of the query image
+        matchedRegions,                       // feature::Regions
         Square(geometricFilter.m_dPrecision_robust),
         Square(fDistRatio),
         out_featureMatches); // output
@@ -1433,7 +1435,7 @@ bool VoctreeLocalizer::localizeRig_opengv(const std::vector<feature::MapRegionsP
     sfm::ImageLocalizerMatchData matchData;
     matchData.vec_inliers = vec_inliers[camID];
     matchData.error_max = param->_errorMax;
-    matchData.projection_matrix = intrinsics.get_projective_equivalent(pose);
+    matchData.projection_matrix = intrinsics.getProjectiveEquivalent(pose);
     matchData.pt2D = vec_pts2D[camID];
     matchData.pt3D = vec_pts3D[camID];
     

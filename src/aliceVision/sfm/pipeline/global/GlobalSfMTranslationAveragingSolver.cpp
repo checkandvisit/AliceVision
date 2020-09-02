@@ -16,19 +16,19 @@
 #include <aliceVision/multiview/translationAveraging/common.hpp>
 #include <aliceVision/multiview/translationAveraging/solver.hpp>
 #include <aliceVision/graph/graph.hpp>
-#include <aliceVision/track/Track.hpp>
+#include <aliceVision/track/TracksBuilder.hpp>
 #include <aliceVision/stl/stl.hpp>
 #include <aliceVision/system/Timer.hpp>
 #include <aliceVision/linearProgramming/linearProgramming.hpp>
 #include <aliceVision/multiview/essential.hpp>
-#include <aliceVision/multiview/conditioning.hpp>
+#include <aliceVision/robustEstimation/conditioning.hpp>
 #include <aliceVision/multiview/translationAveraging/common.hpp>
 #include <aliceVision/multiview/translationAveraging/solver.hpp>
 #include <aliceVision/sfm/pipeline/global/TranslationTripletKernelACRansac.hpp>
 #include <aliceVision/config.hpp>
 #include <aliceVision/alicevision_omp.hpp>
 
-#include <dependencies/histogram/histogram.hpp>
+#include <aliceVision/utils/Histogram.hpp>
 
 #include <boost/progress.hpp>
 
@@ -491,15 +491,15 @@ void GlobalSfMTranslationAveragingSolver::ComputePutativeTranslation_EdgesCovera
 
               Mat3 Rij;
               Vec3 tij;
-              RelativeCameraMotion(RI, ti, RJ, tj, &Rij, &tij);
+              relativeCameraMotion(RI, ti, RJ, tj, &Rij, &tij);
 
               Mat3 Rjk;
               Vec3 tjk;
-              RelativeCameraMotion(RJ, tj, RK, tk, &Rjk, &tjk);
+              relativeCameraMotion(RJ, tj, RK, tk, &Rjk, &tjk);
 
               Mat3 Rik;
               Vec3 tik;
-              RelativeCameraMotion(RI, ti, RK, tk, &Rik, &tik);
+              relativeCameraMotion(RI, ti, RK, tk, &Rik, &tik);
 
               // set number of threads, 1 if openMP is not enabled
               const int thread_id = omp_get_thread_num();
@@ -648,7 +648,7 @@ bool GlobalSfMTranslationAveragingSolver::Estimate_T_triplet(
     const camera::Pinhole * intrinsic = dynamic_cast< const camera::Pinhole * > (intrinsicPtr);
     if (intrinsic && intrinsic->isValid())
     {
-      min_focal = std::min(min_focal, intrinsic->focal());
+      min_focal = std::min(min_focal, intrinsic->getFocalLengthPix());
     }
   }
   if (min_focal == std::numeric_limits<double>::max())
@@ -684,9 +684,9 @@ bool GlobalSfMTranslationAveragingSolver::Estimate_T_triplet(
 
   vec_tis.resize(3);
   Mat3 K, R;
-  KRt_From_P(T.P1, &K, &R, &vec_tis[0]);
-  KRt_From_P(T.P2, &K, &R, &vec_tis[1]);
-  KRt_From_P(T.P3, &K, &R, &vec_tis[2]);
+  KRt_from_P(T.P1, &K, &R, &vec_tis[0]);
+  KRt_from_P(T.P2, &K, &R, &vec_tis[1]);
+  KRt_from_P(T.P3, &K, &R, &vec_tis[2]);
 
 #ifdef DEBUG_TRIPLET
   // compute 3D scene base on motion estimation
@@ -732,7 +732,6 @@ bool GlobalSfMTranslationAveragingSolver::Estimate_T_triplet(
       const View * view = sfm_data.getViews().at(viewIndex).get();
       const camera::IntrinsicBase *  cam = sfm_data.getIntrinsics().find(view->getIntrinsicId())->second.get();
       const camera::Pinhole * intrinsicPtr = dynamic_cast< const camera::Pinhole * >(cam);
-      const Vec2 principal_point = intrinsicPtr->principal_point();
 
       // get normalized feature
       const feature::PointFeature & pt = normalizedFeaturesPerView.getFeatures(viewIndex)[featIndex];

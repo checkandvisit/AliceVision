@@ -12,8 +12,9 @@
 #include "aliceVision/multiview/translationAveraging/translationAveragingTest.hpp"
 
 #define BOOST_TEST_MODULE translation_averaging_globalTi_from_tijs
-#include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/floating_point_comparison.hpp>
 #include <aliceVision/unitTest.hpp>
 
 using namespace aliceVision;
@@ -41,7 +42,7 @@ BOOST_AUTO_TEST_CASE(translation_averaging_globalTi_from_tijs) {
       bCardiod, bRelative_Translation_PerTriplet
     );
 
-  d.ExportToPLY("global_translations_from_Tij_GT.ply");
+  d.exportToPLY("global_translations_from_Tij_GT.ply");
   visibleCamPosToSVGSurface(d._C, "global_translations_from_Tij_GT.svg");
 
   //-- Compute the global translations from the translation heading directions

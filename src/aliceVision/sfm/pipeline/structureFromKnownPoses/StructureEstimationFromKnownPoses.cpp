@@ -6,13 +6,13 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "StructureEstimationFromKnownPoses.hpp"
+#include <aliceVision/feature/metric.hpp>
 #include <aliceVision/matching/IndMatch.hpp>
-#include <aliceVision/matching/metric.hpp>
-#include <aliceVision/robustEstimation/guidedMatching.hpp>
-#include <aliceVision/multiview/fundamentalKernelSolver.hpp>
+#include <aliceVision/matching/guidedMatching.hpp>
+#include <aliceVision/multiview/relativePose/FundamentalError.hpp>
 #include <aliceVision/multiview/triangulation/Triangulation.hpp>
 #include <aliceVision/graph/graph.hpp>
-#include <aliceVision/track/Track.hpp>
+#include <aliceVision/track/TracksBuilder.hpp>
 #include <aliceVision/sfm/sfmTriangulation.hpp>
 #include <aliceVision/config.hpp>
 
@@ -102,8 +102,20 @@ void StructureEstimationFromKnownPoses::match(const SfMData& sfmData,
     if (sfmData.getIntrinsics().count(viewL->getIntrinsicId()) != 0 ||
         sfmData.getIntrinsics().count(viewR->getIntrinsicId()) != 0)
     {
-      const Mat34 P_L = iterIntrinsicL->second.get()->get_projective_equivalent(poseL);
-      const Mat34 P_R = iterIntrinsicR->second.get()->get_projective_equivalent(poseR);
+      std::shared_ptr<IntrinsicBase> camL = iterIntrinsicL->second;
+      std::shared_ptr<camera::Pinhole> pinHoleCamL = std::dynamic_pointer_cast<camera::Pinhole>(camL);
+      if (!pinHoleCamL) {
+        ALICEVISION_LOG_ERROR("Camera is not pinhole in match");
+      }
+
+      std::shared_ptr<IntrinsicBase> camR = iterIntrinsicR->second;
+      std::shared_ptr<camera::Pinhole> pinHoleCamR = std::dynamic_pointer_cast<camera::Pinhole>(camR);
+      if (!pinHoleCamL) {
+        ALICEVISION_LOG_ERROR("Camera is not pinhole in match");
+      }
+      
+      const Mat34 P_L = pinHoleCamL->getProjectiveEquivalent(poseL);
+      const Mat34 P_R = pinHoleCamR->getProjectiveEquivalent(poseR);
 
       const Mat3 F_lr = F_from_P(P_L, P_R);
       std::vector<feature::EImageDescriberType> commonDescTypes = regionsPerView.getCommonDescTypes(*it);
@@ -112,9 +124,9 @@ void StructureEstimationFromKnownPoses::match(const SfMData& sfmData,
       for(feature::EImageDescriberType descType: commonDescTypes)
       {
         std::vector<matching::IndMatch> matches;
-      #ifdef ALICEVISION_EXHAUSTIVE_MATCHING
-        robustEstimation::GuidedMatching
-          <Mat3, fundamental::kernel::EpipolarDistanceError>
+#ifdef ALICEVISION_EXHAUSTIVE_MATCHING
+          matching::guidedMatching
+          <Mat3, multiview::relativePose::FundamentalEpipolarDistanceError>
           (
             F_lr,
             iterIntrinsicL->second.get(),
@@ -129,8 +141,7 @@ void StructureEstimationFromKnownPoses::match(const SfMData& sfmData,
         const Vec3 epipole2  = epipole_from_P(P_R, poseL);
 
         //const feature::Regions& regions = regionsPerView.getRegions(it->first);
-        robustEstimation::GuidedMatching_Fundamental_Fast
-          <fundamental::kernel::EpipolarDistanceError>
+        matching::guidedMatchingFundamentalFast<multiview::relativePose::FundamentalEpipolarDistanceError>
           (
             F_lr,
             epipole2,
@@ -207,16 +218,23 @@ void StructureEstimationFromKnownPoses::filter(
           iterTracks != map_tracksCommon.end(); ++iterTracks) {
           {
             const track::Track & subTrack = iterTracks->second;
-            Triangulation trianObj;
+            multiview::Triangulation trianObj;
             for (auto iter = subTrack.featPerView.begin(); iter != subTrack.featPerView.end(); ++iter)
             {
               const size_t imaIndex = iter->first;
               const size_t featIndex = iter->second;
               const View * view = sfmData.getViews().at(imaIndex).get();
-              const IntrinsicBase * cam = sfmData.getIntrinsics().at(view->getIntrinsicId()).get();
+              
+              std::shared_ptr<camera::IntrinsicBase> cam = sfmData.getIntrinsics().at(view->getIntrinsicId());
+              std::shared_ptr<camera::Pinhole> camPinHole = std::dynamic_pointer_cast<camera::Pinhole>(cam);
+              if (!camPinHole) {
+                ALICEVISION_LOG_ERROR("Camera is not pinhole in filter");
+                continue;
+              }
+
               const Pose3 pose = sfmData.getPose(*view).getTransform();
               const Vec2 pt = regionsPerView.getRegions(imaIndex, subTrack.descType).GetRegionPosition(featIndex);
-              trianObj.add(cam->get_projective_equivalent(pose), cam->get_ud_pixel(pt));
+              trianObj.add(camPinHole->getProjectiveEquivalent(pose), cam->get_ud_pixel(pt));
             }
             const Vec3 Xs = trianObj.compute();
             if (trianObj.minDepth() > 0 && trianObj.error()/(double)trianObj.size() < 4.0)

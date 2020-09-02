@@ -10,7 +10,7 @@
 #include "rigResection.hpp"
 
 #include <aliceVision/config.hpp>
-#include <aliceVision/feature/svgVisualization.hpp>
+#include <aliceVision/matching/svgVisualization.hpp>
 #include <aliceVision/matching/IndMatch.hpp>
 #include <aliceVision/sfmDataIO/sfmDataIO.hpp>
 #include <aliceVision/sfm/pipeline/regionsIO.hpp>
@@ -227,7 +227,7 @@ bool CCTagLocalizer::localize(const image::Image<float> & imageGrey,
     const feature::CCTAG_Regions & cctagQueryRegions = tmpQueryRegions.getRegions<feature::CCTAG_Regions>(_cctagDescType);
     
     // just debugging -- save the svg image with detected cctag
-    feature::saveCCTag2SVG(imagePath, 
+    matching::saveCCTag2SVG(imagePath, 
                             imageSize, 
                             cctagQueryRegions,
                             param->_visualDebug+"/"+bfs::path(imagePath).stem().string()+".svg");
@@ -313,7 +313,7 @@ bool CCTagLocalizer::localize(const feature::MapRegionsPerDesc & genQueryRegions
     if(!param->_visualDebug.empty() && !imagePath.empty())
     {
 //      namespace bfs = boost::filesystem;
-//      feature::saveFeatures2SVG(imagePath,
+//      matching::saveFeatures2SVG(imagePath,
 //                                 imageSize,
 //                                 resectionData.pt2D,
 //                                 param._visualDebug + "/" + bfs::path(imagePath).stem().string() + ".associations.svg");
@@ -336,7 +336,7 @@ bool CCTagLocalizer::localize(const feature::MapRegionsPerDesc & genQueryRegions
     Vec3 t_;
     // Decompose the projection matrix  to get K, R and t using 
     // RQ decomposition
-    KRt_From_P(resectionData.projection_matrix, &K_, &R_, &t_);
+    KRt_from_P(resectionData.projection_matrix, &K_, &R_, &t_);
     queryIntrinsics.setK(K_);
     ALICEVISION_LOG_DEBUG("K estimated\n" << K_);
     queryIntrinsics.setWidth(imageSize.first);
@@ -623,7 +623,7 @@ bool CCTagLocalizer::localizeRig_opengv(const std::vector<feature::MapRegionsPer
     sfm::ImageLocalizerMatchData matchData;
     matchData.vec_inliers = vec_inliers[cam];
     matchData.error_max = param->_errorMax;
-    matchData.projection_matrix = intrinsics.get_projective_equivalent(pose);
+    matchData.projection_matrix = intrinsics.getProjectiveEquivalent(pose);
     matchData.pt2D = vec_pts2D[cam];
     matchData.pt3D = vec_pts3D[cam];
     
@@ -818,7 +818,7 @@ void CCTagLocalizer::getAllAssociations(const feature::CCTAG_Regions &queryRegio
       outputName += ".svg";
       
       const bool showNotMatched = true;
-      feature::saveCCTagMatches2SVG(imagePath, 
+      matching::saveCCTagMatches2SVG(imagePath, 
                                      imageSize, 
                                      queryRegions,
                                      matchedPath,

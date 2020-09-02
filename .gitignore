@@ -71,5 +71,3 @@ Production
 *.gz
 *.tgz
 *.tar*
-
-.vscode/settings.json

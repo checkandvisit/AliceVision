@@ -52,7 +52,7 @@ bool readIntrinsic(const std::string & fileName, Mat3 & K);
 ///   way 1: independent cameras [R|t|f] and structure
 ///   way 2: independent cameras motion [R|t], shared focal [f] and structure
 int main() {
-
+  std::mt19937 randomNumberGenerator;
   const std::string sInputDir = string("../") + string(THIS_SOURCE_DIR) + "/imageData/SceauxCastle/";
   Image<RGBColor> image;
   const string jpg_filenameL = sInputDir + "100_7101.jpg";
@@ -109,6 +109,7 @@ int main() {
   {
     // Find corresponding points
     matching::DistanceRatioMatch(
+      randomNumberGenerator,
       0.8, matching::BRUTE_FORCE_L2,
       *regions_perImage.at(0).get(),
       *regions_perImage.at(1).get(),
@@ -165,7 +166,7 @@ int main() {
     std::pair<size_t, size_t> size_imaL(imageL.Width(), imageL.Height());
     std::pair<size_t, size_t> size_imaR(imageR.Width(), imageR.Height());
     RelativePoseInfo relativePose_info;
-    if (!robustRelativePose(K, K, xL, xR, relativePose_info, size_imaL, size_imaR, 256))
+    if (!robustRelativePose(K, K, xL, xR, randomNumberGenerator, relativePose_info, size_imaL, size_imaR, 256))
     {
       std::cerr << " /!\\ Robust relative pose estimation failure."
         << std::endl;
@@ -221,14 +222,14 @@ int main() {
     switch (iBAType)
     {
       case 1: // Each view use it's own pinhole camera intrinsic
-        tinyScene.intrinsics[0].reset(new Pinhole(imageL.Width(), imageL.Height(), K(0, 0), K(0, 2), K(1, 2)));
-        tinyScene.intrinsics[1].reset(new Pinhole(imageR.Width(), imageR.Height(), K(0, 0), K(0, 2), K(1, 2)));
+        tinyScene.intrinsics[0].reset(new Pinhole(imageL.Width(), imageL.Height(), K(0, 0), K(1, 1), K(0, 2), K(1, 2)));
+        tinyScene.intrinsics[1].reset(new Pinhole(imageR.Width(), imageR.Height(), K(0, 0), K(1, 1), K(0, 2), K(1, 2)));
         break;
       case 2: // Shared pinhole camera intrinsic
-        tinyScene.intrinsics[0].reset(new Pinhole(imageL.Width(), imageL.Height(), K(0, 0), K(0, 2), K(1, 2)));
+        tinyScene.intrinsics[0].reset(new Pinhole(imageL.Width(), imageL.Height(), K(0, 0), K(1, 1), K(0, 2), K(1, 2)));
         break;
       case 3: // Shared pinhole camera intrinsic with radial K3 distortion
-        tinyScene.intrinsics[0].reset(new PinholeRadialK3(imageL.Width(), imageL.Height(), K(0, 0), K(0, 2), K(1, 2)));
+        tinyScene.intrinsics[0].reset(new PinholeRadialK3(imageL.Width(), imageL.Height(), K(0, 0), K(1, 1), K(0, 2), K(1, 2)));
         break;
       default:
         std::cerr << "Invalid input number" << std::endl;

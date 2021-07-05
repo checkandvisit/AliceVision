@@ -134,6 +134,17 @@ if(ALICEVISION_BUILD_SFM)
           aliceVision_sfm
           aliceVision_sfmData
           aliceVision_sfmDataIO
+          aliceVision_panorama
+          ${Boost_LIBRARIES}
+  )
+  alicevision_add_software(aliceVision_panoramaMerging
+    SOURCE main_panoramaMerging.cpp
+    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
+    LINKS aliceVision_system
+          aliceVision_image
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
+          aliceVision_panorama
           ${Boost_LIBRARIES}
   )
   alicevision_add_software(aliceVision_panoramaCompositing
@@ -141,10 +152,19 @@ if(ALICEVISION_BUILD_SFM)
     FOLDER ${FOLDER_SOFTWARE_PIPELINE}
     LINKS aliceVision_system
           aliceVision_image
-          aliceVision_feature
-          aliceVision_sfm
           aliceVision_sfmData
           aliceVision_sfmDataIO
+          aliceVision_panorama
+          ${Boost_LIBRARIES}
+  )
+  alicevision_add_software(aliceVision_panoramaSeams
+    SOURCE main_panoramaSeams.cpp
+    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
+    LINKS aliceVision_system
+          aliceVision_image
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
+          aliceVision_panorama
           ${Boost_LIBRARIES}
   )
   alicevision_add_software(aliceVision_panoramaInit
@@ -185,6 +205,19 @@ if(ALICEVISION_BUILD_SFM)
             Boost::boost
     )
   endif()
+
+  alicevision_add_software(aliceVision_distortionCalibration
+    SOURCE main_distortionCalibration.cpp
+    FOLDER ${FOLDER_SOFTWARE_PIPELINE}
+    LINKS aliceVision_dataio
+          aliceVision_image
+          aliceVision_calibration
+          aliceVision_system
+          aliceVision_sfmDataIO
+          Boost::program_options
+          Boost::filesystem
+          Boost::boost
+  )
 
   # Calibrate a rig
   alicevision_add_software(aliceVision_rigCalibration

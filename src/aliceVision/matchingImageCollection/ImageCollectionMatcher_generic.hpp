@@ -25,11 +25,13 @@ class ImageCollectionMatcher_generic : public IImageCollectionMatcher
   public:
   ImageCollectionMatcher_generic(
     float dist_ratio,
+    bool crossMatching,
     matching::EMatcherType matcherType
   );
 
   /// Find corresponding points between some pair of view Ids
   void Match(
+    std::mt19937 & randomNumberGenerator,
     const feature::RegionsPerView& regionsPerView,
     const PairSet & pairs,
     feature::EImageDescriberType descType,
@@ -39,6 +41,8 @@ class ImageCollectionMatcher_generic : public IImageCollectionMatcher
   private:
   // Distance ratio used to discard spurious correspondence
   float _f_dist_ratio;
+  // Do we use cross matching (Symmetric matching test) ?
+  bool _useCrossMatching;
   // Matcher Type
   matching::EMatcherType _matcherType;
 };

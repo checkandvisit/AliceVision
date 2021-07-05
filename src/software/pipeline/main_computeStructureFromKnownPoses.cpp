@@ -41,10 +41,11 @@ int aliceVision_main(int argc, char **argv)
   std::vector<std::string> featuresFolders;
   double geometricErrorMax = 5.0;
   bool colorizedSfm = false;
-  // user optional parameters
 
+  // user optional parameters
   std::string describerTypesName = feature::EImageDescriberType_enumToString(feature::EImageDescriberType::SIFT);
   std::vector<std::string> matchesFolders;
+  int randomSeed = std::mt19937::default_seed;
 
   po::options_description allParams("AliceVision ComputeStructureFromKnownPoses");
 
@@ -67,8 +68,10 @@ int aliceVision_main(int argc, char **argv)
         "Maximum error (in pixels) allowed for features matching during geometric verification for known camera poses. "
         "If set to 0 it lets the ACRansac select an optimal value.")
     ("colorizedSfm,c", po::value<bool>(&colorizedSfm)->default_value(colorizedSfm),
-      "Color the Landmarks of SfmData");
-;
+      "Color the Landmarks of SfmData")
+    ("randomSeed", po::value<int>(&randomSeed)->default_value(randomSeed),
+        "This seed value will generate a sequence using a linear random generator. Set -1 to use a random seed.")
+    ;
 
   po::options_description logParams("Log parameters");
   logParams.add_options()
@@ -104,6 +107,8 @@ int aliceVision_main(int argc, char **argv)
 
   ALICEVISION_COUT("Program called with the following parameters:");
   ALICEVISION_COUT(vm);
+
+  std::mt19937 randomNumberGenerator(randomSeed == -1 ? std::random_device()() : randomSeed);
 
   // set verbose level
   system::Logger::get()->setLogLevel(verboseLevel);
@@ -170,7 +175,7 @@ int aliceVision_main(int argc, char **argv)
   structureEstimator.filter(sfmData, pairs, regionsPerView);
 
   // create 3D landmarks
-  structureEstimator.triangulate(sfmData, regionsPerView);
+  structureEstimator.triangulate(sfmData, regionsPerView, randomNumberGenerator);
 
   if(colorizedSfm)
   {

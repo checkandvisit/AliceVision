@@ -20,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: alicevision/alicevision-deps:ci-2020.05.16-centos7-cuda9.0
+      image: alicevision/alicevision-deps:ci-2021-04-22-centos7-cuda10.2
     env:
       DEPS_INSTALL_DIR: /opt/AliceVision_install
       BUILD_TYPE: Release
@@ -63,7 +63,12 @@ jobs:
       - name: Build
         working-directory: ./build
         run: |
-          make -j8 install
+          make -j$(nproc)
+
+      - name: Install
+        working-directory: ./build
+        run: |
+          make install
 
       - name: Unit Tests
         working-directory: ./build
@@ -76,7 +81,7 @@ jobs:
           cmake ../src/samples/aliceVisionAs3rdParty \
            -DBUILD_SHARED_LIBS:BOOL=ON \
            -DCMAKE_PREFIX_PATH:PATH="$PWD/../../AV_install;${DEPS_INSTALL_DIR}"
-          make -j8
+          make -j$(nproc)
 
       - name: Functional Tests
         working-directory: ./functional_tests
@@ -84,7 +89,7 @@ jobs:
           git clone --branch master https://github.com/alicevision/SfM_quality_evaluation.git
           cd SfM_quality_evaluation/
           # checkout a specific commit to ensure repeatability
-          git checkout 9f7d5876a76aad8e8d45c258fddfbb04aaa11d60
+          git checkout 40ad6a089969cb9426a0b9879c28fbeb08c1a24c
           export LD_LIBRARY_PATH=$PWD/../../../AV_install/lib64:${DEPS_INSTALL_DIR}/lib64:${DEPS_INSTALL_DIR}/lib:${LD_LIBRARY_PATH}
           echo "ldd aliceVision_cameraInit"
           ldd $PWD/../../../AV_install/bin/aliceVision_cameraInit

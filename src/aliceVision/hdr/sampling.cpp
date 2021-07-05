@@ -145,7 +145,7 @@ void square(image::Image<image::RGBfColor> & dest, const Eigen::Matrix<image::RG
     }
 }
 
-bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, const std::vector<std::string> & imagePaths, const std::vector<float>& times, const size_t imageWidth, const size_t imageHeight, const size_t channelQuantization, const EImageColorSpace & colorspace, const Sampling::Params params)
+bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, const std::vector<std::string> & imagePaths, const std::vector<float>& times, const size_t imageWidth, const size_t imageHeight, const size_t channelQuantization, const EImageColorSpace & colorspace, bool applyWhiteBalance, const Sampling::Params params)
 {
     const int radiusp1 = params.radius + 1;
     const int diameter = (params.radius * 2) + 1;
@@ -153,6 +153,7 @@ bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, c
 
     std::vector<std::pair<int, int>> vec_blocks;
     const auto step = params.blockSize - diameter;
+    vec_blocks.reserve(int(imageHeight / step) * int(imageWidth / step));
     for(int cy = 0; cy < imageHeight; cy += step)
     {
         for(int cx = 0; cx < imageWidth; cx += step)
@@ -169,8 +170,12 @@ bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, c
     {
         const float exposure = times[idBracket];
 
+        image::ImageReadOptions options;
+        options.outputColorSpace = colorspace;
+        options.applyWhiteBalance = applyWhiteBalance;
+
         // Load image
-        readImage(imagePaths[idBracket], img, colorspace);
+        readImage(imagePaths[idBracket], img, options);
 
         if(img.Width() != imageWidth || img.Height() != imageHeight)
         {
@@ -371,7 +376,7 @@ bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, c
 
             for (int x = params.radius; x < samples.Width() - params.radius; ++x)
             {
-                ImageSample & sample = samples(y, x);
+                const ImageSample & sample = samples(y, x);
                 UniqueDescriptor desc;
 
                 for (int k = 0; k < sample.descriptions.size(); ++k)
@@ -394,7 +399,7 @@ bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, c
             }
         }
 
-        for (int i = 0; i < omp_get_max_threads(); ++i)
+        for(int i = 0; i < counters_vec.size(); ++i)
         {
             for (auto & item : counters_vec[i])
             {
@@ -422,7 +427,7 @@ bool Sampling::extractSamplesFromImages(std::vector<ImageSample>& out_samples, c
 
         for (std::size_t i = 0; i < item.second.size(); ++i)
         {
-            Coordinates coords = item.second[i];
+            const Coordinates& coords = item.second[i];
 
             if (!samples(coords.second, coords.first).descriptions.empty())
             {

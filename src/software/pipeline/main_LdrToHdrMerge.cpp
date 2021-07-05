@@ -44,6 +44,7 @@ std::string getHdrImagePath(const std::string& outputPath, std::size_t g)
     return hdrImagePath;
 }
 
+
 int aliceVision_main(int argc, char** argv)
 {
     std::string verboseLevel = system::EVerboseLevel_enumToString(system::Logger::getDefaultVerboseLevel());
@@ -56,8 +57,10 @@ int aliceVision_main(int argc, char** argv)
     int offsetRefBracketIndex = 0;
 
     hdr::EFunctionType fusionWeightFunction = hdr::EFunctionType::GAUSSIAN;
-    float highlightCorrectionFactor = 1.0f;
+    float highlightCorrectionFactor = 0.0f;
     float highlightTargetLux = 120000.0f;
+
+    image::EStorageDataType storageDataType = image::EStorageDataType::Float;
 
     int rangeStart = -1;
     int rangeSize = 1;
@@ -92,6 +95,8 @@ int aliceVision_main(int argc, char** argv)
         ("highlightCorrectionFactor", po::value<float>(&highlightCorrectionFactor)->default_value(highlightCorrectionFactor),
          "float value between 0 and 1 to correct clamped highlights in dynamic range: use 0 for no correction, 1 for "
          "full correction to maxLuminance.")
+        ("storageDataType", po::value<image::EStorageDataType>(&storageDataType)->default_value(storageDataType),
+         ("Storage data type: " + image::EStorageDataType_informations()).c_str())
         ("rangeStart", po::value<int>(&rangeStart)->default_value(rangeStart),
           "Range image index start.")
         ("rangeSize", po::value<int>(&rangeSize)->default_value(rangeSize),
@@ -154,8 +159,13 @@ int aliceVision_main(int argc, char** argv)
     }
     if(nbBrackets > 0 && (countImages % nbBrackets) != 0)
     {
-        ALICEVISION_LOG_ERROR("The input SfMData file is not compatible with the number of brackets.");
+        ALICEVISION_LOG_ERROR("The input SfMData file (" << countImages << " images) is not compatible with the number of brackets (" << nbBrackets << " brackets).");
         return EXIT_FAILURE;
+    }
+    if(nbBrackets == 1 && !byPass)
+    {
+        ALICEVISION_LOG_WARNING("Enable bypass as there is only one input bracket.");
+        byPass = true;
     }
 
     const std::size_t channelQuantization = std::pow(2, channelQuantizationPower);
@@ -224,9 +234,12 @@ int aliceVision_main(int argc, char** argv)
         // Export a new sfmData with HDR images as new Views.
         for(std::size_t g = 0; g < groupedViews.size(); ++g)
         {
-            const std::string hdrImagePath = getHdrImagePath(outputPath, g);
             std::shared_ptr<sfmData::View> hdrView = std::make_shared<sfmData::View>(*targetViews[g]);
-            hdrView->setImagePath(hdrImagePath);
+            if(!byPass)
+            {
+                const std::string hdrImagePath = getHdrImagePath(outputPath, g);
+                hdrView->setImagePath(hdrImagePath);
+            }
             outputSfm.getViews()[hdrView->getViewId()] = hdrView;
         }
 
@@ -236,6 +249,11 @@ int aliceVision_main(int argc, char** argv)
             ALICEVISION_LOG_ERROR("Can not save output sfm file at " << sfmOutputDataFilepath);
             return EXIT_FAILURE;
         }
+    }
+    if(byPass)
+    {
+        ALICEVISION_LOG_INFO("Bypass enabled, nothing to compute.");
+        return EXIT_SUCCESS;
     }
 
     hdr::rgbCurve fusionWeight(channelQuantization);
@@ -259,9 +277,13 @@ int aliceVision_main(int argc, char** argv)
         {
             const std::string filepath = group[i]->getImagePath();
             ALICEVISION_LOG_INFO("Load " << filepath);
-            image::readImage(filepath, images[i], image::EImageColorSpace::SRGB);
 
-            exposures[i] = group[i]->getCameraExposureSetting();
+            image::ImageReadOptions options;
+            options.outputColorSpace = image::EImageColorSpace::SRGB;
+            options.applyWhiteBalance = group[i]->getApplyWhiteBalance();
+            image::readImage(filepath, images[i], options);
+
+            exposures[i] = group[i]->getCameraExposureSetting(/*targetView->getMetadataISO(), targetView->getMetadataFNumber()*/);
         }
 
         // Merge HDR images
@@ -287,6 +309,8 @@ int aliceVision_main(int argc, char** argv)
 
         // Write an image with parameters from the target view
         oiio::ParamValueList targetMetadata = image::readImageMetadata(targetView->getImagePath());
+        targetMetadata.push_back(oiio::ParamValue("AliceVision:storageDataType", image::EStorageDataType_enumToString(storageDataType)));
+
         image::writeImage(hdrImagePath, HDRimage, image::EImageColorSpace::AUTO, targetMetadata);
     }
 

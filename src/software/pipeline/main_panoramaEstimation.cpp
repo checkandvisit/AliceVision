@@ -16,6 +16,7 @@
 #include <aliceVision/system/main.hpp>
 #include <aliceVision/system/cmdline.hpp>
 #include <aliceVision/image/all.hpp>
+#include <aliceVision/sfm/liealgebra.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -36,6 +37,50 @@ using namespace aliceVision;
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
 
+bool estimateAutomaticReferenceFrame(Eigen::Matrix3d & referenceFrameUpdate, const sfmData::SfMData & toUpdate)
+{
+  //Compute mean of the rotation X component
+  Eigen::Vector3d mean = Eigen::Vector3d::Zero();
+  for (auto& pose: toUpdate.getPoses())
+  {
+    geometry::Pose3 p = pose.second.getTransform();
+    Eigen::Vector3d rX = p.rotation().transpose() * Eigen::Vector3d::UnitX();
+    mean += rX;
+  }
+  mean /= toUpdate.getPoses().size();
+
+
+  //Compute covariance matrix of the rotation X component
+  Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
+  for (auto& pose: toUpdate.getPoses())
+  {
+    geometry::Pose3 p = pose.second.getTransform();
+    Eigen::Vector3d rX = p.rotation().transpose() * Eigen::Vector3d::UnitX();
+
+    C += (rX - mean) * (rX - mean).transpose();
+  }
+
+
+  Eigen::EigenSolver<Eigen::Matrix3d> solver(C, true);
+  Eigen::Vector3d nullestSpace = solver.eigenvectors().col(2).real();
+  Eigen::Vector3d unity = Eigen::Vector3d::UnitY();
+
+  if (nullestSpace(1) < 0.0)
+  {
+    unity *= -1.0;
+  }
+
+  //Compute rotation which rotates nullestSpace onto unitY
+  Eigen::Vector3d axis = nullestSpace.cross(unity);
+  double sa = axis.norm();
+  double ca = nullestSpace.dot(unity);
+  Eigen::Matrix3d M = SO3::skew(axis);  
+  Eigen::Matrix3d R = Eigen::Matrix3d::Identity() + M + M * M * (1.0 - ca) / (sa * sa);
+
+  referenceFrameUpdate = R.transpose();
+
+  return true;
+}
 
 int aliceVision_main(int argc, char **argv)
 {
@@ -49,9 +94,13 @@ int aliceVision_main(int argc, char **argv)
 
   // user optional parameters
   std::string describerTypesName = feature::EImageDescriberType_enumToString(feature::EImageDescriberType::SIFT);
+  bool filterMatches = false;
   bool refine = true;
   float offsetLongitude = 0.0f;
   float offsetLatitude = 0.0f;
+  bool useAutomaticReferenceFrame = true;
+
+  int randomSeed = std::mt19937::default_seed;
 
   sfm::ReconstructionEngine_panorama::Params params;
 
@@ -81,10 +130,14 @@ int aliceVision_main(int argc, char **argv)
       "* from essential matrix"
       "* from rotation matrix"
       "* from homography matrix")
+    ("rotationAveragingWeighting", po::value<bool>(&params.rotationAveragingWeighting)->default_value(params.rotationAveragingWeighting),
+      "Use weighting of image links during rotation averaging.")
     ("offsetLongitude", po::value<float>(&offsetLongitude)->default_value(offsetLongitude),
       "offset to camera longitude")
     ("offsetLatitude", po::value<float>(&offsetLatitude)->default_value(offsetLatitude),
       "offset to camera latitude")
+    ("filterMatches", po::value<bool>(&filterMatches)->default_value(filterMatches),
+      "Filter Matches before solving the Panorama.")
     ("refine", po::value<bool>(&refine)->default_value(refine),
       "Refine cameras with a Bundle Adjustment")
     ("lockAllIntrinsics", po::value<bool>(&params.lockAllIntrinsics)->default_value(params.lockAllIntrinsics),
@@ -98,7 +151,10 @@ int aliceVision_main(int argc, char **argv)
     ("intermediateRefineWithFocalDist", po::value<bool>(&params.intermediateRefineWithFocalDist)->default_value(params.intermediateRefineWithFocalDist),
       "Add an intermediate refine with rotation+focal+distortion in the different BA steps.")
     ("outputViewsAndPoses", po::value<std::string>(&outputViewsAndPosesFilepath),
-      "Path of the output SfMData file.");
+      "Path of the output SfMData file.")
+    ("randomSeed", po::value<int>(&randomSeed)->default_value(randomSeed),
+      "This seed value will generate a sequence using a linear random generator. Set -1 to use a random seed.")
+    ;
 
   po::options_description logParams("Log parameters");
   logParams.add_options()
@@ -172,11 +228,13 @@ int aliceVision_main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+
+  /* Store the pose c1_R_o of the prior */
   sfmData::Poses & initial_poses = inputSfmData.getPoses();
-  Eigen::Matrix3d ref_R_base = Eigen::Matrix3d::Identity();
+  Eigen::Matrix3d c1_R_oprior = Eigen::Matrix3d::Identity();
   if (!initial_poses.empty())
   {
-    ref_R_base = initial_poses.begin()->second.getTransform().rotation();
+    c1_R_oprior = initial_poses.begin()->second.getTransform().rotation();
   }
 
   // get describerTypes
@@ -215,9 +273,16 @@ int aliceVision_main(int argc, char **argv)
     outDirectory,
     (fs::path(outDirectory) / "sfm_log.html").string());
 
+  sfmEngine.initRandomSeed(randomSeed);
+
   // configure the featuresPerView & the matches_provider
   sfmEngine.SetFeaturesProvider(&featuresPerView);
   sfmEngine.SetMatchesProvider(&pairwiseMatches);
+
+  if(filterMatches)
+  {
+      sfmEngine.filterMatches();
+  }
 
   if(!sfmEngine.process())
   {
@@ -243,19 +308,54 @@ int aliceVision_main(int argc, char **argv)
 
   sfmData::SfMData& outSfmData = sfmEngine.getSfMData();
 
+  
+
   // If an initial set of poses was available, make sure at least one pose is aligned with it
+  // Otherwise take the middle view (sorted over time)
   sfmData::Poses & final_poses = outSfmData.getPoses();
-  if (!final_poses.empty() && !initial_poses.empty())
+
+  if (!final_poses.empty())
   {
-    Eigen::Matrix3d ref_R_current = final_poses.begin()->second.getTransform().rotation();
-    Eigen::Matrix3d R_restore = ref_R_current.transpose() * ref_R_base;
+    Eigen::Matrix3d ocur_R_oprior = Eigen::Matrix3d::Identity();
+
+    if (initial_poses.empty()) {
+
+      if (useAutomaticReferenceFrame)
+      {
+        estimateAutomaticReferenceFrame(ocur_R_oprior, outSfmData);
+      }
+      else 
+      {
+        std::vector<std::pair<int64_t, IndexT>> sorted_views;
+
+        // Sort views per timestamps
+        for (auto v : outSfmData.getViews()) {
+          int64_t t = v.second->getMetadataDateTimestamp();
+          sorted_views.push_back(std::make_pair(t, v.second->getPoseId()));
+        }
+        std::sort(sorted_views.begin(), sorted_views.end());
+
+        // Get the view which was taken at the middle of the sequence 
+        int median = sorted_views.size() / 2;
+        IndexT poseId = sorted_views[median].second;
+        
+        // Set as reference
+        ocur_R_oprior = final_poses[poseId].getTransform().rotation().transpose();
+      }
+    }
+    else 
+    {
+      Eigen::Matrix3d c1_R_ocur = final_poses.begin()->second.getTransform().rotation();
+      ocur_R_oprior = c1_R_ocur.transpose() * c1_R_oprior;
+    }
     
-    for (auto & pose : outSfmData.getPoses())
+    for (auto & pose : final_poses)
     {
       geometry::Pose3 p = pose.second.getTransform();
 
-      Eigen::Matrix3d newR = p.rotation() * R_restore;
-      p.rotation() = newR;
+      Eigen::Matrix3d c_R_oprior = p.rotation() * ocur_R_oprior;
+
+      p.rotation() = c_R_oprior;
       pose.second.setTransform(p);
     }
   }

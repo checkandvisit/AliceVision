@@ -110,6 +110,7 @@ int aliceVision_main(int argc, char **argv)
   double knownPosesGeometricErrorMax = 4.0;
   bool savePutativeMatches = false;
   bool guidedMatching = false;
+  bool crossMatching = false;
   int maxIteration = 2048;
   bool matchFilePerImage = false;
   size_t numMatchesToKeep = 0;
@@ -117,6 +118,7 @@ int aliceVision_main(int argc, char **argv)
   bool exportDebugFiles = false;
   bool matchFromKnownCameraPoses = false;
   const std::string fileExtension = "txt";
+  int randomSeed = std::mt19937::default_seed;
 
   po::options_description allParams(
      "Compute corresponding features between a series of views:\n"
@@ -169,6 +171,8 @@ int aliceVision_main(int argc, char **argv)
       "Save putative matches.")
     ("guidedMatching", po::value<bool>(&guidedMatching)->default_value(guidedMatching),
       "Use the found model to improve the pairwise correspondences.")
+    ("crossMatching", po::value<bool>(&crossMatching)->default_value(crossMatching),
+      "Make sure that the matching process is symmetric (same matches for I->J than fo J->I).")
     ("matchFilePerImage", po::value<bool>(&matchFilePerImage)->default_value(matchFilePerImage),
       "Save matches in a separate file per image.")
     ("distanceRatio", po::value<float>(&distRatio)->default_value(distRatio),
@@ -184,7 +188,10 @@ int aliceVision_main(int argc, char **argv)
     ("rangeStart", po::value<int>(&rangeStart)->default_value(rangeStart),
       "Range image index start.")
     ("rangeSize", po::value<int>(&rangeSize)->default_value(rangeSize),
-      "Range size.");
+      "Range size.")
+    ("randomSeed", po::value<int>(&randomSeed)->default_value(randomSeed),
+      "This seed value will generate a sequence using a linear random generator. Set -1 to use a random seed.")
+    ;
 
   po::options_description logParams("Log parameters");
   logParams.add_options()
@@ -228,12 +235,15 @@ int aliceVision_main(int argc, char **argv)
   // set verbose level
   system::Logger::get()->setLogLevel(verboseLevel);
 
+  std::mt19937 randomNumberGenerator(randomSeed == -1 ? std::random_device()() : randomSeed);
+
   // check and set input options
   if(matchesFolder.empty() || !fs::is_directory(matchesFolder))
   {
     ALICEVISION_LOG_ERROR("Invalid output matches folder: " + matchesFolder);
     return EXIT_FAILURE;
   }
+  
 
   const matchingImageCollection::EGeometricFilterType geometricFilterType = matchingImageCollection::EGeometricFilterType_stringToEnum(geometricFilterTypeName);
 
@@ -266,6 +276,8 @@ int aliceVision_main(int argc, char **argv)
   PairSet pairs;
   std::set<IndexT> filter;
 
+  
+  // We assume that there is only one pair for (I,J) and (J,I)
   if(predefinedPairList.empty())
   {
     pairs = exhaustivePairs(sfmData.getViews(), rangeStart, rangeSize);
@@ -300,7 +312,7 @@ int aliceVision_main(int argc, char **argv)
 
   // allocate the right Matcher according the Matching requested method
   EMatcherType collectionMatcherType = EMatcherType_stringToEnum(nearestMatchingMethod);
-  std::unique_ptr<IImageCollectionMatcher> imageCollectionMatcher = createImageCollectionMatcher(collectionMatcherType, distRatio);
+  std::unique_ptr<IImageCollectionMatcher> imageCollectionMatcher = createImageCollectionMatcher(collectionMatcherType, distRatio, crossMatching);
 
   const std::vector<feature::EImageDescriberType> describerTypes = feature::EImageDescriberType_stringToEnums(describerTypesName);
 
@@ -361,7 +373,7 @@ int aliceVision_main(int argc, char **argv)
         ALICEVISION_LOG_INFO(EImageDescriberType_enumToString(descType) + " Regions Matching");
 
         // photometric matching of putative pairs
-        imageCollectionMatcher->Match(regionPerView, pairsPoseUnknown, descType, mapPutativesMatches);
+        imageCollectionMatcher->Match(randomNumberGenerator, regionPerView, pairsPoseUnknown, descType, mapPutativesMatches);
 
         // TODO: DELI
         // if(!guided_matching) regionPerView.clearDescriptors()
@@ -462,6 +474,7 @@ int aliceVision_main(int argc, char **argv)
         regionPerView,
         GeometricFilterMatrix_F_AC(geometricErrorMax, maxIteration, geometricEstimator),
         mapPutativesMatches,
+        randomNumberGenerator,
         guidedMatching);
     }
     break;
@@ -473,6 +486,7 @@ int aliceVision_main(int argc, char **argv)
       regionPerView,
       GeometricFilterMatrix_F_AC(geometricErrorMax, maxIteration, geometricEstimator, true),
       mapPutativesMatches,
+      randomNumberGenerator,
       guidedMatching);
   }
   break;
@@ -484,6 +498,7 @@ int aliceVision_main(int argc, char **argv)
         regionPerView,
         GeometricFilterMatrix_E_AC(geometricErrorMax, maxIteration),
         mapPutativesMatches,
+        randomNumberGenerator,
         guidedMatching);
 
       // perform an additional check to remove pairs with poor overlap
@@ -512,7 +527,7 @@ int aliceVision_main(int argc, char **argv)
         &sfmData,
         regionPerView,
         GeometricFilterMatrix_H_AC(geometricErrorMax, maxIteration),
-        mapPutativesMatches, guidedMatching,
+        mapPutativesMatches, randomNumberGenerator, guidedMatching,
         onlyGuidedMatching ? -1.0 : 0.6);
     }
     break;
@@ -524,6 +539,7 @@ int aliceVision_main(int argc, char **argv)
         regionPerView,
         GeometricFilterMatrix_HGrowing(geometricErrorMax, maxIteration),
         mapPutativesMatches,
+        randomNumberGenerator,
         guidedMatching);
     }
     break;

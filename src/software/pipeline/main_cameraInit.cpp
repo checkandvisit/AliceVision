@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <stdexcept>
 
 // These constants define the current software version.
 // They must be updated when the command line is changed.
@@ -181,7 +182,6 @@ int aliceVision_main(int argc, char **argv)
   std::string outputFilePath;
 
   // user optional parameters
-
   std::string defaultIntrinsicKMatrix;
   std::string defaultCameraModelName;
   std::string allowedCameraModelsStr = "pinhole,radial1,radial3,brown,fisheye4,fisheye1";
@@ -193,6 +193,7 @@ int aliceVision_main(int argc, char **argv)
   std::string viewIdRegex = ".*?(\\d+)";
 
   bool allowSingleView = false;
+  bool useInternalWhiteBalance = true;
 
   po::options_description allParams("AliceVision cameraInit");
 
@@ -231,6 +232,8 @@ int aliceVision_main(int argc, char **argv)
       " * " + EViewIdMethod_enumToString(EViewIdMethod::FILENAME) + ": Generate viewId from file names using regex.") .c_str())
     ("viewIdRegex", po::value<std::string>(&viewIdRegex)->default_value(viewIdRegex),
       "Regex used to catch number used as viewId in filename.")
+    ("useInternalWhiteBalance", po::value<bool>(&useInternalWhiteBalance)->default_value(useInternalWhiteBalance),
+      "Apply the white balance included in the image metadata (Only for raw images)")
     ("allowSingleView", po::value<bool>(&allowSingleView)->default_value(allowSingleView),
       "Allow the program to process a single view.\n"
       "Warning: if a single view is process, the output file can't be use in many other programs.");
@@ -425,6 +428,8 @@ int aliceVision_main(int argc, char **argv)
   // create missing intrinsics
   auto viewPairItBegin = sfmData.getViews().begin();
 
+  std::map<IndexT, std::vector<IndexT>> poseGroups;
+
   #pragma omp parallel for
   for(int i = 0; i < sfmData.getViews().size(); ++i)
   {
@@ -436,23 +441,52 @@ int aliceVision_main(int argc, char **argv)
     {
       try
       {
-        const int frameId = std::stoi(fs::path(view.getImagePath()).stem().string());
-        const int subPoseId = std::stoi(parentPath.stem().string());
+        IndexT subPoseId;
+        std::string prefix;
+        std::string suffix;
+        if(!sfmDataIO::extractNumberFromFileStem(parentPath.stem().string(), subPoseId, prefix, suffix))
+        {
+          ALICEVISION_THROW_ERROR("Cannot find sub-pose id from image path: " << parentPath);
+        }
+
         std::hash<std::string> hash; // TODO use boost::hash_combine
         view.setRigAndSubPoseId(hash(parentPath.parent_path().string()), subPoseId);
-        view.setFrameId(static_cast<IndexT>(frameId));
 
         #pragma omp critical
         detectedRigs[view.getRigId()][view.getSubPoseId()]++;
       }
       catch(std::exception& e)
       {
-        ALICEVISION_LOG_WARNING("Invalid rig structure for view: " << view.getImagePath() << std::endl << "Used as single image.");
+        ALICEVISION_LOG_WARNING("Invalid rig structure for view: " << view.getImagePath() << std::endl << e.what() << std::endl << "Used as single image.");
       }
+    }
+
+    // try to detect image sequence
+    {
+        IndexT frameId;
+        std::string prefix;
+        std::string suffix;
+        if(sfmDataIO::extractNumberFromFileStem(fs::path(view.getImagePath()).stem().string(), frameId, prefix, suffix))
+        {
+          view.setFrameId(frameId);
+        }
+    }
+    
+    if(boost::algorithm::starts_with(parentPath.stem().string(), "ps_") ||
+       boost::algorithm::starts_with(parentPath.stem().string(), "hdr_"))
+    {
+        std::hash<std::string> hash;
+        IndexT tmpPoseID = hash(parentPath.string()); // use a temporary pose Id to group the images
+
+#pragma omp critical
+        {
+            poseGroups[tmpPoseID].push_back(view.getViewId());
+        }
     }
 
     IndexT intrinsicId = view.getIntrinsicId();
     double sensorWidth = -1;
+    double sensorHeight = -1;
     enum class ESensorWidthSource {
         FROM_DB,
         FROM_METADATA_ESTIMATION,
@@ -476,7 +510,7 @@ int aliceVision_main(int argc, char **argv)
       camera::Pinhole* intrinsic = dynamic_cast<camera::Pinhole*>(intrinsicBase);
       if(intrinsic != nullptr)
       {
-        if(intrinsic->getFocalLengthPix() > 0)
+        if(intrinsic->getFocalLengthPixX() > 0)
         {
           // the view intrinsic is initialized
           #pragma omp atomic
@@ -498,14 +532,14 @@ int aliceVision_main(int argc, char **argv)
         ALICEVISION_LOG_TRACE("Sensor width found in database: " << std::endl
                               << "\t- brand: " << make << std::endl
                               << "\t- model: " << model << std::endl
-                              << "\t- sensor width: " << datasheet._sensorSize << " mm");
+                              << "\t- sensor width: " << datasheet._sensorWidth << " mm");
 
         if(datasheet._model != model) {
           // the camera model in database is slightly different
           unsureSensors.emplace(std::make_pair(make, model), std::make_pair(view.getImagePath(), datasheet)); // will throw a warning message
         }
 
-        sensorWidth = datasheet._sensorSize;
+        sensorWidth = datasheet._sensorWidth;
         sensorWidthSource = ESensorWidthSource::FROM_DB;
 
         if(focalLengthmm > 0.0) {
@@ -586,13 +620,21 @@ int aliceVision_main(int argc, char **argv)
     intrinsic->setInitializationMode(intrinsicInitMode);
 
     // Set sensor size
-    if (imageRatio > 1.0) {
+    if (sensorHeight > 0.0) 
+    {
       intrinsicBase->setSensorWidth(sensorWidth);
-      intrinsicBase->setSensorHeight(sensorWidth / imageRatio);
+      intrinsicBase->setSensorHeight(sensorHeight);
     }
-    else {
-      intrinsicBase->setSensorWidth(sensorWidth);
-      intrinsicBase->setSensorHeight(sensorWidth * imageRatio);
+    else 
+    {
+      if (imageRatio > 1.0) {
+        intrinsicBase->setSensorWidth(sensorWidth);
+        intrinsicBase->setSensorHeight(sensorWidth / imageRatio);
+      }
+      else {
+        intrinsicBase->setSensorWidth(sensorWidth);
+        intrinsicBase->setSensorHeight(sensorWidth * imageRatio);
+      }
     }
 
     if(intrinsic && intrinsic->isValid())
@@ -705,6 +747,33 @@ int aliceVision_main(int argc, char **argv)
     }
   }
 
+  // Update poseId for detected multi-exposure or multi-lighting images (multiple shots with the same camera pose)
+  if(!poseGroups.empty())
+  {
+      for(const auto& poseGroup : poseGroups)
+      {
+          // Sort views of the poseGroup per timestamps
+          std::vector<std::pair<int64_t, IndexT>> sortedViews;
+          for(const IndexT vId : poseGroup.second)
+          {
+              int64_t t = sfmData.getView(vId).getMetadataDateTimestamp();
+              sortedViews.push_back(std::make_pair(t, vId));
+          }
+          std::sort(sortedViews.begin(), sortedViews.end());
+
+          // Get the view which was taken at the middle of the sequence
+          int median = sortedViews.size() / 2;
+          IndexT middleViewId = sortedViews[median].second;
+
+          for(const auto it : sortedViews)
+          {
+              const IndexT vId = it.second;
+              // Update poseId with middle view id
+              sfmData.getView(vId).setPoseId(middleViewId);
+          }
+      }
+  }
+
   if(!noMetadataImagePaths.empty())
   {
     std::stringstream ss;
@@ -735,7 +804,7 @@ int aliceVision_main(int argc, char **argv)
                         << "\t- image camera model: " << unsureSensor.first.second <<  std::endl
                         << "\t- database camera brand: " << unsureSensor.second.second._brand <<  std::endl
                         << "\t- database camera model: " << unsureSensor.second.second._model << std::endl
-                        << "\t- database camera sensor size: " << unsureSensor.second.second._sensorSize << " mm");
+                        << "\t- database camera sensor width: " << unsureSensor.second.second._sensorWidth  << " mm");
     ALICEVISION_LOG_WARNING("Please check and correct camera model(s) name in the database." << std::endl);
   }
 
@@ -772,6 +841,15 @@ int aliceVision_main(int argc, char **argv)
     ALICEVISION_LOG_ERROR("At least " << std::string(allowSingleView ? "one image" : "two images") << " should have an initialized intrinsic." << std::endl
                           << "Check your input images metadata (brand, model, focal length, ...), more should be set and correct." << std::endl);
     return EXIT_FAILURE;
+  }
+
+  // Add the white balance option to the image metadata
+  for (auto vitem : sfmData.getViews())
+  {
+    if (vitem.second) 
+    {
+      vitem.second->addMetadata("AliceVision:useWhiteBalance", (useInternalWhiteBalance)?"1":"0");
+    }
   }
   
   // store SfMData views & intrinsic data

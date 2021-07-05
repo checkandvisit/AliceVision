@@ -5,6 +5,7 @@ add_subdirectory(numeric)
 add_subdirectory(system)
 add_subdirectory(stl)
 add_subdirectory(utils)
+add_subdirectory(panorama)
 
 # SfM modules
 
@@ -30,14 +31,11 @@ if(ALICEVISION_BUILD_SFM)
   add_subdirectory(sfmDataIO)
   add_subdirectory(track)
   add_subdirectory(voctree)
-
-  if(ALICEVISION_HAVE_OPENCV)
-    add_subdirectory(calibration)
-  endif()
+  add_subdirectory(calibration)
 endif()
 
 if(ALICEVISION_BUILD_HDR)
-add_subdirectory(hdr)
+  add_subdirectory(hdr)
 endif()
 
 # MVS modules

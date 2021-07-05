@@ -222,6 +222,7 @@ struct ProcessingParams
     float contrast = 1.0f;
     int medianFilter = 0;
     bool fillHoles = false;
+    bool fixNonFinite = false;
 
     SharpenParams sharpen = 
     {
@@ -256,55 +257,21 @@ struct ProcessingParams
 
 };
 
-#if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_OPENCV)
-// Conversion functions used for bilateral filter
-
-/**
- * @brief allows to convert an aliceVision image to an openCv image (cv::Mat) in BGR
- * Ignores the alpha channel of the source image
- * @param[in] matIn - Input RGBA aliceVision image
- * @return the resulting openCV image
- */
-cv::Mat imageRGBAToCvMatBGR(const image::Image<image::RGBAfColor>& img)
-{  
-    cv::Mat mat(img.Height(), img.Width(), CV_32FC3);
-    for(int row = 0; row < img.Height(); row++)
-    {
-        cv::Vec3f* rowPtr = mat.ptr<cv::Vec3f>(row);
-        for(int col = 0; col < img.Width(); col++)
-        {
-            cv::Vec3f& matPixel = rowPtr[col];
-            const image::RGBAfColor& imgPixel = img(row, col);
-            matPixel = cv::Vec3f(imgPixel.b(), imgPixel.g(), imgPixel.r());
-        }
-    }
-    return mat;
-}
-
-/**
- * @brief allows to convert an openCv image (cv::Mat) in BGR to an aliceVision image
- * Keeps the alpha channel of the output image unchanged
- * @param[in] matIn - Input openCV image (cv::Mat)
- * @param[out] matIn - output RGBA aliceVision image
- * @return the resulting regex
- */
-void cvMatBGRToImageRGBA(const cv::Mat& matIn, image::Image<image::RGBAfColor>& imageOut)
-{
-    for(int row = 0; row < imageOut.Height(); row++)
-    {
-        const cv::Vec3f* rowPtr = matIn.ptr<cv::Vec3f>(row);
-        for(int col = 0; col < imageOut.Width(); col++)
-        {
-            const cv::Vec3f& matPixel = rowPtr[col];
-            imageOut(row, col) = image::RGBAfColor(matPixel[2], matPixel[1], matPixel[0], imageOut(row, col).a());
-        }
-    }
-}
-#endif
 
 void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams& pParams)
 {
     const unsigned int nchannels = 4;
+
+    // Fix non-finite pixels
+    // Note: fill holes needs to fix non-finite values first
+    if(pParams.fixNonFinite || pParams.fillHoles)
+    {
+        oiio::ImageBuf inBuf(oiio::ImageSpec(image.Width(), image.Height(), nchannels, oiio::TypeDesc::FLOAT), image.data());
+        int pixelsFixed = 0;
+        // Works inplace
+        oiio::ImageBufAlgo::fixNonFinite(inBuf, inBuf, oiio::ImageBufAlgo::NonFiniteFixMode::NONFINITE_BOX3, &pixelsFixed);
+        ALICEVISION_LOG_INFO("Fixed " << pixelsFixed << " non-finite pixels.");
+    }
 
     if (pParams.scaleFactor != 1.0f)
     {
@@ -317,9 +284,6 @@ void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams
 
         const oiio::ImageSpec imageSpecResized(nw, nh, nchannels, oiio::TypeDesc::FLOAT);
         const oiio::ImageSpec imageSpecOrigin(w, h, nchannels, oiio::TypeDesc::FLOAT);
-        oiio::ImageBuf bufferOrigin(imageSpecOrigin, image.data());
-        oiio::ImageBuf bufferResized(imageSpecResized, rescaled.data());
-        oiio::ImageBufAlgo::resample(bufferResized, bufferOrigin);
 
         const oiio::ImageBuf inBuf(imageSpecOrigin, image.data());
         oiio::ImageBuf outBuf(imageSpecResized, rescaled.data());
@@ -363,13 +327,13 @@ void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams
     {
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_OPENCV)
             // Create temporary OpenCV Mat (keep only 3 Channels) to handled Eigen data of our image
-            cv::Mat openCVMatIn = imageRGBAToCvMatBGR(image);
+            cv::Mat openCVMatIn = image::imageRGBAToCvMatBGR(image, CV_32FC3);
             cv::Mat openCVMatOut(image.Width(), image.Height(), CV_32FC3);
 
             cv::bilateralFilter(openCVMatIn, openCVMatOut, pParams.bilateralFilter.distance, pParams.bilateralFilter.sigmaColor, pParams.bilateralFilter.sigmaSpace);
 
             // Copy filtered data from openCV Mat(3 channels) to our image(keep the alpha channel unfiltered)
-            cvMatBGRToImageRGBA(openCVMatOut, image);
+            image::cvMatBGRToImageRGBA(openCVMatOut, image);
             
 #else
             throw std::invalid_argument("Unsupported mode! If you intended to use a bilateral filter, please add OpenCV support.");
@@ -381,7 +345,7 @@ void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams
     {
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_OPENCV)
         // Convert alicevision::image to BGR openCV Mat
-        cv::Mat BGRMat = imageRGBAToCvMatBGR(image);
+        cv::Mat BGRMat = image::imageRGBAToCvMatBGR(image);
 
         // Convert BGR format to Lab format
         cv::Mat labImg;
@@ -416,17 +380,17 @@ void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams
         cv::cvtColor(labImg, BGRMat, cv::COLOR_Lab2LBGR);
 
         // Copy filtered data from openCV Mat to our alicevision image(keep the alpha channel unfiltered) 
-        cvMatBGRToImageRGBA(BGRMat, image);
+        image::cvMatBGRToImageRGBA(BGRMat, image);
 #else
         throw std::invalid_argument( "Unsupported mode! If you intended to use a Clahe filter, please add OpenCV support.");
 #endif
     }
-
     if(pParams.fillHoles)
     {
         image::Image<image::RGBAfColor> filtered(image.Width(), image.Height());
         oiio::ImageBuf inBuf(oiio::ImageSpec(image.Width(), image.Height(), nchannels, oiio::TypeDesc::FLOAT), image.data());
         oiio::ImageBuf outBuf(oiio::ImageSpec(image.Width(), image.Height(), nchannels, oiio::TypeDesc::FLOAT), filtered.data());
+
         // Premult necessary to ensure that the fill holes works as expected
         oiio::ImageBufAlgo::premult(inBuf, inBuf);
         oiio::ImageBufAlgo::fillholes_pushpull(outBuf, inBuf);
@@ -443,12 +407,14 @@ void processImage(image::Image<image::RGBAfColor>& image, const ProcessingParams
 
 void saveImage(image::Image<image::RGBAfColor>& image, const std::string& inputPath, const std::string& outputPath,
                const std::vector<std::string>& metadataFolders,
-               const EImageFormat& outputFormat)
+               const EImageFormat outputFormat, const image::EStorageDataType storageDataType)
 {
     // Read metadata path
     std::string metadataFilePath;
     
     const std::string filename = fs::path(inputPath).filename().string();
+    const std::string outExtension = boost::to_lower_copy(fs::path(outputPath).extension().string());
+    const bool isEXR = (outExtension == ".exr");
     // If metadataFolders is specified
     if(!metadataFolders.empty())
     {
@@ -484,7 +450,13 @@ void saveImage(image::Image<image::RGBAfColor>& image, const std::string& inputP
         metadataFilePath = inputPath;
     }
 
-    const oiio::ParamValueList metadata = image::readImageMetadata(metadataFilePath);
+    oiio::ParamValueList metadata = image::readImageMetadata(metadataFilePath);
+
+    if(isEXR)
+    {
+        // Select storage data type
+        metadata.push_back(oiio::ParamValue("AliceVision:storageDataType", image::EStorageDataType_enumToString(storageDataType)));
+    }
 
     // Save image
     ALICEVISION_LOG_TRACE("Export image: '" << outputPath << "'.");
@@ -516,6 +488,7 @@ int aliceVision_main(int argc, char * argv[])
     std::vector<std::string> metadataFolders;
     std::string outputPath;
     EImageFormat outputFormat = EImageFormat::RGBA;
+    image::EStorageDataType storageDataType = image::EStorageDataType::Float;
     std::string extension;
 
     ProcessingParams pParams;
@@ -541,6 +514,10 @@ int aliceVision_main(int argc, char * argv[])
         "Use images metadata from specific folder(s) instead of those specified in the input images.")
         ("reconstructedViewsOnly", po::value<bool>(&pParams.reconstructedViewsOnly)->default_value(pParams.reconstructedViewsOnly),
          "Process only recontructed views or all views.")
+
+        ("fixNonFinite", po::value<bool>(&pParams.fixNonFinite)->default_value(pParams.fixNonFinite),
+         "Fill non-finite pixels.")
+
         ("scaleFactor", po::value<float>(&pParams.scaleFactor)->default_value(pParams.scaleFactor),
          "Scale Factor (1.0: no change).")
 
@@ -587,6 +564,9 @@ int aliceVision_main(int argc, char * argv[])
 
         ("outputFormat", po::value<EImageFormat>(&outputFormat)->default_value(outputFormat),
          "Output image format (rgba, rgb, grayscale)")
+    
+        ("storageDataType", po::value<image::EStorageDataType>(&storageDataType)->default_value(storageDataType),
+         ("Storage data type: " + image::EStorageDataType_informations()).c_str())
 
         ("extension", po::value<std::string>(&extension)->default_value(extension),
          "Output image extension (like exr, or empty to keep the source file format.")
@@ -722,9 +702,14 @@ int aliceVision_main(int argc, char * argv[])
 
             ALICEVISION_LOG_INFO(++i << "/" << size << " - Process view '" << viewId << "'.");
 
+
+            image::ImageReadOptions options;
+            options.outputColorSpace = image::EImageColorSpace::LINEAR;
+            options.applyWhiteBalance = view.getApplyWhiteBalance();
+
             // Read original image
             image::Image<image::RGBAfColor> image;
-            image::readImage(viewPath, image, image::EImageColorSpace::LINEAR);
+            image::readImage(viewPath, image, options);
 
             // If exposureCompensation is needed for sfmData files
             if (pParams.exposureCompensation)
@@ -744,7 +729,7 @@ int aliceVision_main(int argc, char * argv[])
             processImage(image, pParams);
 
             // Save the image
-            saveImage(image, viewPath, outputfilePath, metadataFolders, outputFormat);
+            saveImage(image, viewPath, outputfilePath, metadataFolders, outputFormat, storageDataType);
 
             // Update view for this modification
             view.setImagePath(outputfilePath);
@@ -839,7 +824,7 @@ int aliceVision_main(int argc, char * argv[])
             processImage(image, pParams);
 
             // Save the image
-            saveImage(image, inputFilePath, outputFilePath, metadataFolders, outputFormat);
+            saveImage(image, inputFilePath, outputFilePath, metadataFolders, outputFormat, storageDataType);
         }
     }
 

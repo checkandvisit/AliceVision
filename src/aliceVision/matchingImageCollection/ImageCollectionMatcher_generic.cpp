@@ -22,14 +22,16 @@ using namespace aliceVision::matching;
 using namespace aliceVision::feature;
 
 ImageCollectionMatcher_generic::ImageCollectionMatcher_generic(
-  float distRatio, EMatcherType matcherType)
+  float distRatio, bool crossMatching, EMatcherType matcherType)
   : IImageCollectionMatcher()
   , _f_dist_ratio(distRatio)
+  , _useCrossMatching(crossMatching)
   , _matcherType(matcherType)
 {
 }
 
 void ImageCollectionMatcher_generic::Match(
+  std::mt19937 & randomNumberGenerator,
   const feature::RegionsPerView& regionsPerView,
   const PairSet & pairs,
   feature::EImageDescriberType descType,
@@ -66,7 +68,7 @@ void ImageCollectionMatcher_generic::Match(
     }
 
     // Initialize the matching interface
-    matching::RegionsDatabaseMatcher matcher(_matcherType, regionsI);
+    matching::RegionsDatabaseMatcher matcher(randomNumberGenerator, _matcherType, regionsI);
 
     #pragma omp parallel for schedule(dynamic) if(b_multithreaded_pair_search)
     for (int j = 0; j < (int)indexToCompare.size(); ++j)
@@ -84,6 +86,37 @@ void ImageCollectionMatcher_generic::Match(
 
       IndMatches vec_putatives_matches;
       matcher.Match(_f_dist_ratio, regionsJ, vec_putatives_matches);
+
+      if (_useCrossMatching)
+      {
+        // Initialize the matching interface
+        matching::RegionsDatabaseMatcher matcherCross(randomNumberGenerator, _matcherType, regionsJ);  
+
+        IndMatches vec_putatives_matches_cross;
+        matcherCross.Match(_f_dist_ratio, regionsI, vec_putatives_matches_cross);
+
+        //Create a dictionnary of matches indexed by their pair of indexes
+        std::map<std::pair<int, int>, IndMatch> check_matches;
+        for (IndMatch & m : vec_putatives_matches_cross)
+        {
+          std::pair<int, int> key = std::make_pair(m._i, m._j);
+          check_matches[key] = m;
+        }
+
+        IndMatches vec_putatives_matches_checked;
+        for (IndMatch & m : vec_putatives_matches)
+        {
+          //Check with reversed key (images are swapped)
+          std::pair<int, int> key = std::make_pair(m._j, m._i);
+          if (check_matches.find(key) != check_matches.end())
+          {
+            vec_putatives_matches_checked.push_back(m);
+          }
+        }
+
+        std::swap(vec_putatives_matches, vec_putatives_matches_checked);
+      }
+
       #pragma omp critical
       {
         ++my_progress_bar;

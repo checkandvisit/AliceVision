@@ -4,6 +4,17 @@
 # Software PROPERTY FOLDER is 'Software/Utils'
 set(FOLDER_SOFTWARE_UTILS "Software/Utils")
 
+
+if(ALICEVISION_HAVE_CUDA)
+alicevision_add_software(aliceVision_utils_hardwareResources
+  SOURCE main_hardwareResources.cpp
+  FOLDER ${FOLDER_SOFTWARE_UTILS}
+  LINKS aliceVision_system
+        aliceVision_gpu
+        Boost::program_options
+)
+endif()
+
 if(ALICEVISION_BUILD_SFM)
 # Uncertainty
 if(ALICEVISION_HAVE_UNCERTAINTYTE)
@@ -208,6 +219,7 @@ alicevision_add_software(aliceVision_utils_split360Images
   LINKS aliceVision_system
         aliceVision_numeric
         aliceVision_image
+        aliceVision_panorama
         ${OPENIMAGEIO_LIBRARIES}
         Boost::program_options
         Boost::filesystem
@@ -225,4 +237,64 @@ alicevision_add_software(aliceVision_utils_fisheyeProjection
         ${Boost_LIBRARIES}
 )
 
+# Lighting estimation from picture, albedo and geometry
+alicevision_add_software(aliceVision_utils_lightingEstimation
+  SOURCE main_lightingEstimation.cpp
+  FOLDER ${FOLDER_SOFTWARE_UTILS}
+  LINKS aliceVision_system
+        aliceVision_numeric
+        aliceVision_sfmData
+        aliceVision_sfmDataIO
+        aliceVision_mvsUtils
+        aliceVision_image
+        aliceVision_lightingEstimation
+        ${Boost_LIBRARIES}
+)
+
+
+# Perform color chart detection
+if(ALICEVISION_HAVE_OPENCV)
+  alicevision_add_software(aliceVision_utils_colorCheckerDetection
+    SOURCE main_colorCheckerDetection.cpp
+    FOLDER ${FOLDER_SOFTWARE_UTILS}
+    LINKS aliceVision_system
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
+          Boost::program_options
+          Boost::filesystem
+          ${OpenCV_LIBS} # opencv_core  opencv_imgproc  opencv_video  opencv_imgcodecs  opencv_videoio  opencv_features2d  opencv_xfeatures2d
+          opencv_mcc
+)
+endif()
+
+
+# Perform color correction
+if(ALICEVISION_HAVE_OPENCV)
+  alicevision_add_software(aliceVision_utils_colorCheckerCorrection
+    SOURCE main_colorCheckerCorrection.cpp
+    FOLDER ${FOLDER_SOFTWARE_UTILS}
+    LINKS aliceVision_system
+          aliceVision_sfmData
+          aliceVision_sfmDataIO
+          Boost::program_options
+          Boost::filesystem
+          ${OpenCV_LIBS} # opencv_core  opencv_imgproc  opencv_video  opencv_imgcodecs  opencv_videoio  opencv_features2d  opencv_xfeatures2d
+          opencv_mcc
+)
+endif()
+
 endif() # ALICEVISION_BUILD_SFM
+
+if(ALICEVISION_BUILD_MVS)
+
+# Merge two meshes
+alicevision_add_software(aliceVision_utils_mergeMeshes
+  SOURCE main_mergeMeshes.cpp
+  FOLDER ${FOLDER_SOFTWARE_UTILS}
+  LINKS aliceVision_system
+        aliceVision_numeric
+	Geogram::geogram
+        ${Boost_LIBRARIES}
+)
+
+endif() # ALICEVISION_BUILD_MVS

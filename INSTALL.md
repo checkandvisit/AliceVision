@@ -27,7 +27,7 @@ Dependencies
 
 AliceVision depends on:
 
-* Boost >= 1.60.0
+* Boost >= 1.70.0
 * Eigen >= 3.3.4
 * Ceres >= 1.10.0
 * Flann >= 1.8.4 (internal)
@@ -35,10 +35,9 @@ AliceVision depends on:
 * Coin-or linear programming (Clp) (internal)
 * Open Solver Interface (Osi) >= 0.106.10 (internal)
 * Lemon >= 1.3 (internal)
-* OpenEXR >= 2.2.0
-* OpenImageIO >= 1.8.7
+* OpenEXR >= 2.4.0
+* OpenImageIO >= 2.1.0
 * Geogram >= 1.5.4 (https://gforge.inria.fr/frs/?group_id=5833)
-* OpenEXR >= 2.2
 * MeshSDFilter (internal)
 * OpenMesh (internal)
 * zlib
@@ -47,7 +46,7 @@ Other optional libraries can enable specific features (check "CMake Options" for
 
 * OpenMP (enable multi-threading)
 * Mosek 5 (linear programming)
-* OpenCV >= 3.2 (feature extraction, calibration module, video IO)
+* OpenCV >= 3.4.11 (feature extraction, calibration module, video IO), >= 4.5 for colorchecker (mcc)
 * Alembic (data I/O)
 * CCTag (feature extraction/matching and localization on CPU or GPU)
 * PopSift (feature extraction on GPU)
@@ -93,14 +92,17 @@ vcpkg install ^
           boost-program-options boost-property-tree boost-ptr-container boost-regex boost-serialization boost-system boost-test boost-thread boost-timer ^
           lz4 ^
           openexr ^
-          openimageio[libraw] ^
           alembic ^
           geogram ^
           eigen3 ^
-          ceres[suitesparse] ^
+          opencv[eigen,ffmpeg,webp,contrib,nonFree,cuda] ^
+          openimageio[libraw,ffmpeg,freetype,opencv,gif,openjpeg,webp,tools] ^
+          ceres[suitesparse,cxsparse] ^
           cuda ^
+          tbb ^
           --triplet x64-windows
 ```
+
 3. Build AliceVision
 ```bash
 # With VCPKG_ROOT being the path to the root of vcpkg installation

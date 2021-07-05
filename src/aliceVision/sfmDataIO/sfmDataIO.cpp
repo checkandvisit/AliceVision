@@ -101,13 +101,15 @@ bool Load(sfmData::SfMData& sfmData, const std::string& filename, ESfMData partF
   {
     status = loadJSON(sfmData, filename, partFlag);
   }
-#if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_ALEMBIC)
-  else if(extension == ".abc") // Alembic
+  else if (extension == ".abc") // Alembic
   {
-    AlembicImporter(filename).populateSfM(sfmData, partFlag);
-    status = true;
+#if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_ALEMBIC)
+      AlembicImporter(filename).populateSfM(sfmData, partFlag);
+      status = true;
+#else
+      ALICEVISION_THROW_ERROR("Cannot load the ABC file: \"" << filename << "\", AliceVision is built without Alembic support.");
+#endif
   }
-#endif // ALICEVISION_HAVE_ALEMBIC
   else if(fs::is_directory(filename))
   {
     status = readGt(filename, sfmData);
@@ -147,13 +149,16 @@ bool Save(const sfmData::SfMData& sfmData, const std::string& filename, ESfMData
   {
     status = saveBAF(sfmData, tmpPath, partFlag);
   }
-#if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_ALEMBIC)
   else if (extension == ".abc") // Alembic
   {
-    AlembicExporter(tmpPath).addSfM(sfmData, partFlag);
-    status = true;
+#if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_ALEMBIC)
+      AlembicExporter(tmpPath).addSfM(sfmData, partFlag);
+      status = true;
+#else
+      ALICEVISION_THROW_ERROR("Cannot save the ABC file: \"" << filename
+                                                             << "\", AliceVision is built without Alembic support.");
+#endif
   }
-#endif // ALICEVISION_HAVE_ALEMBIC
   else
   {
     ALICEVISION_LOG_ERROR("Cannot save the SfM data file: '" << filename << "'."

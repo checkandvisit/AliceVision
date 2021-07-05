@@ -50,6 +50,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ALICEVISION_BUILD_SFM "Build AliceVision SfM part" ON)
 option(ALICEVISION_BUILD_MVS "Build AliceVision MVS part" ON)
 option(ALICEVISION_BUILD_HDR "Build AliceVision HDR part" ON)
+option(ALICEVISION_BUILD_SOFTWARE "Build AliceVision command line tools." ON)
 option(ALICEVISION_BUILD_EXAMPLES "Build AliceVision samples applications." OFF)
 option(ALICEVISION_BUILD_COVERAGE "Enable code coverage generation (gcc only)" OFF)
 trilean_option(ALICEVISION_BUILD_DOC "Build AliceVision documentation" AUTO)
@@ -293,17 +294,24 @@ endif()
 # ==============================================================================
 # OpenEXR
 # ==============================================================================
-find_package(OpenEXR REQUIRED)
-if(OPENEXR_FOUND)
-  message(STATUS "OpenEXR found. (Version ${OPENEXR_VERSION})")
+find_package(OpenEXR)
+if(TARGET OpenEXR::IlmImf)
+  message(STATUS "OpenEXR found. (Version ${OpenEXR_VERSION})")
 else()
-  message(SEND_ERROR "Failed to find OpenEXR.")
+  # fallback for old openexr versions (<2.5)
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/openexr)
+  find_package(OpenEXR REQUIRED)
+  if(OPENEXR_FOUND)
+    message(STATUS "OpenEXR found (without config). (Version ${OPENEXR_VERSION})")
+  else()
+    message(SEND_ERROR "Failed to find OpenEXR.")
+  endif()
 endif()
 
 # ==============================================================================
 # OpenImageIO
 # ==============================================================================
-find_package(OpenImageIO 1.8 REQUIRED)
+find_package(OpenImageIO 2.0.9 REQUIRED)
 if(OPENIMAGEIO_FOUND OR OpenImageIO_FOUND)
   message(STATUS "OpenImageIO found.")
   if(UNIX)
@@ -506,15 +514,15 @@ set(ALICEVISION_HAVE_OCVSIFT 0)
 
 if(ALICEVISION_BUILD_SFM)
   if(NOT ALICEVISION_USE_OPENCV STREQUAL "OFF")
-    find_package(OpenCV COMPONENTS core imgproc video imgcodecs videoio features2d xfeatures2d)
+    find_package(OpenCV COMPONENTS core imgproc video imgcodecs videoio features2d)
 
     if(OpenCV_FOUND)
       # We do not set the minimal version directly in find_package
       # due to this issue in opencv: https://github.com/opencv/opencv/issues/5931
       # which considers major version as exact requirement.
-      if(OpenCV_VERSION VERSION_LESS "3.2.0")
+      if(OpenCV_VERSION VERSION_LESS "3.4.11")
         if(ALICEVISION_USE_OPENCV STREQUAL "ON")
-          message(SEND_ERROR "Failed to find OpenCV 3.2.0+")
+          message(SEND_ERROR "Failed to find OpenCV 3.4.11+")
         endif()
       else()
         set(ALICEVISION_HAVE_OPENCV 1)
@@ -612,20 +620,15 @@ set(ALICEVISION_HAVE_OPENGV 0)
 
 if(ALICEVISION_BUILD_SFM)
   if(NOT ALICEVISION_USE_OPENGV STREQUAL "OFF")
-    find_package(OpenGV)
-
-    if(OPENGV_FOUND)
+    find_package(opengv 1.0 CONFIG)
+    if(opengv_FOUND)
       set(ALICEVISION_HAVE_OPENGV 1)
-      message(STATUS "OpenGV found.")
+      message(STATUS "OpenGV ${opengv_VERSION} found.")
     elseif(ALICEVISION_USE_OPENGV STREQUAL "ON")
       message(SEND_ERROR "Failed to find OpenGV.")
     endif()
   endif()
 
-  if(ALICEVISION_HAVE_OPENGV)
-    include_directories(${OPENGV_INCLUDE_DIR})
-    link_directories(${OPENGV_LIBRARY_DIR})
-  endif()
 endif()
 
 # ==============================================================================
@@ -730,7 +733,9 @@ if(ALICEVISION_HAVE_CUDA)
 
   set(CUDA_NVCC_FLAGS_DEBUG   "${CUDA_NVCC_FLAGS_DEBUG};-G;-g")
   # set(CUDA_NVCC_FLAGS_RELEASE "${CUDA_NVCC_FLAGS_RELEASE};-O3")
-  if(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
+  if(CUDA_VERSION VERSION_GREATER_EQUAL 11.1)
+    set(ALICEVISION_CUDA_CC_LIST_BASIC 35 50 52 60 61 62 70 72 75 80 86)
+  elseif(CUDA_VERSION_MAJOR GREATER_EQUAL 11)
     set(ALICEVISION_CUDA_CC_LIST_BASIC 35 50 52 60 61 62 70 72 75 80)
   elseif(CUDA_VERSION_MAJOR GREATER_EQUAL 10)
     set(ALICEVISION_CUDA_CC_LIST_BASIC 30 35 50 52 60 61 62 70 72 75)
@@ -904,6 +909,7 @@ endif()
 # ==============================================================================
 message("\n")
 message("** AliceVision version: " ${ALICEVISION_VERSION})
+message("** Target architecture: " ${TARGET_ARCHITECTURE})
 message("** Build Shared libs: " ${BUILD_SHARED_LIBS})
 message("** Build SfM part: " ${ALICEVISION_BUILD_SFM})
 message("** Build MVS part: " ${ALICEVISION_BUILD_MVS})
@@ -990,8 +996,9 @@ if(ALICEVISION_BUILD_EXAMPLES AND ALICEVISION_BUILD_SFM)
 endif()
 
 # Complete software(s) build on aliceVision libraries
-add_subdirectory(software)
-
+if(ALICEVISION_BUILD_SOFTWARE)
+  add_subdirectory(software)
+endif()
 
 # ==============================================================================
 # Install rules

@@ -29,6 +29,19 @@ alicevision_add_software(aliceVision_convertFloatDescriptorToUchar
         Boost::boost
         Boost::timer
 )
+
+# Change System Coordinate of SfM
+alicevision_add_software(aliceVision_convertSystemCoordinate
+  SOURCE main_convertSystemCoordinate.cpp
+  FOLDER ${FOLDER_SOFTWARE_CONVERT}
+  LINKS aliceVision_system
+        aliceVision_sfmData
+        aliceVision_sfmDataIO
+        aliceVision_geometry
+        Boost::program_options
+        Boost::filesystem
+        Boost::boost
+)
 endif() # ALICEVISION_BUILD_SFM
 
 # Convert image to EXR

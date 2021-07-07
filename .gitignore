@@ -72,3 +72,6 @@ Production
 *.gz
 *.tgz
 *.tar*
+
+.vscode
+.devcontainer
